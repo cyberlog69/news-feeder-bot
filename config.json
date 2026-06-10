@@ -1,0 +1,39 @@
+{
+  "sources": [
+    {
+      "name": "Cyber Security News",
+      "url": "https://cybersecuritynews.com/",
+      "rss": "https://cybersecuritynews.com/feed/",
+      "category": "🔐 Cybersecurity",
+      "enabled": true
+    },
+    {
+      "name": "HackRead",
+      "url": "https://hackread.com/",
+      "rss": "https://hackread.com/feed/",
+      "category": "🕵️ HackRead",
+      "enabled": true
+    },
+    {
+      "name": "The Hacker News",
+      "url": "https://thehackernews.com/",
+      "rss": "https://feeds.feedburner.com/TheHackersNews",
+      "category": "💻 The Hacker News",
+      "enabled": true
+    },
+    {
+      "name": "BleepingComputer",
+      "url": "https://www.bleepingcomputer.com/",
+      "rss": "https://www.bleepingcomputer.com/feed/",
+      "category": "🖥️ BleepingComputer",
+      "enabled": true
+    }
+  ],
+  "settings": {
+    "pollIntervalMinutes": 5,
+    "maxArticlesPerRun": 5,
+    "summaryBulletPoints": 3,
+    "delayBetweenMessagesSec": 3
+  },
+  "_addMoreSources": "Run 'npm run add-source' to interactively add a new news source, OR manually add an entry to the 'sources' array above following the same format."
+}
