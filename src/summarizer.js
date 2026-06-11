@@ -19,8 +19,8 @@ function initGemini(apiKey) {
     return;
   }
   genAI = new GoogleGenerativeAI(apiKey);
-  model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  logger.success('Gemini AI summarizer ready (gemini-1.5-flash)');
+  model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  logger.success('Gemini AI summarizer ready (gemini-2.0-flash)');
 }
 
 /**
