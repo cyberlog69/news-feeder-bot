@@ -1,28 +1,30 @@
-# WhatsApp News Bot 📰🔐
+# WhatsApp & Telegram News Bot 📰🔐
 
-> Automatically fetches the latest **cybersecurity & tech news** from 4 sources, summarizes each article with **Gemini AI**, and delivers it to your **WhatsApp number, group, or channel** — the moment it's published.
+> Automatically fetches the latest **cybersecurity & tech news** from 4 sources, summarizes each article with **Gemini AI**, and delivers it to **WhatsApp and/or Telegram** — the moment it's published.
 
 ---
 
 ## Features
 
-- 🔐 **4 curated cybersecurity sources** — updated in real time (every 5 min)
-- 🤖 **AI summaries** — Gemini 2.0 Flash condenses each article into 3 bullet points
-- 💬 **Flexible delivery** — send to your own number, a WhatsApp group, or a channel
-- 🔁 **Never duplicates** — JSON-based tracker ensures each article is sent only once
-- ➕ **Easy to extend** — add any RSS-enabled news site in seconds
-- 🛡️ **Quota-safe** — built-in rate limiter, retry logic, and summary cache for Gemini
+- 🔐 **4 curated cybersecurity sources** — checked every 5 minutes
+- 🤖 **Gemini AI summaries** — each article condensed into 3 bullet points
+- 💬 **WhatsApp support** — send to a number, group, or channel
+- 📢 **Telegram support** — send to a personal chat, group, or channel
+- 🔀 **Both at once** — run WhatsApp + Telegram simultaneously
+- 🔁 **Never duplicates** — each article is sent only once, across all platforms
+- ➕ **Easy to extend** — add any RSS news site in seconds
+- 🛡️ **Quota-safe** — built-in rate limiter, retry logic, and summary cache
 
 ---
 
 ## News Sources
 
-| Source | Category | RSS |
-|---|---|---|
-| [Cyber Security News](https://cybersecuritynews.com/) | 🔐 Cybersecurity | ✅ |
-| [HackRead](https://hackread.com/) | 🕵️ Hacking & Security | ✅ |
-| [The Hacker News](https://thehackernews.com/) | 💻 Infosec | ✅ |
-| [BleepingComputer](https://www.bleepingcomputer.com/) | 🖥️ Security & Tech | ✅ |
+| Source | Category |
+|---|---|
+| [Cyber Security News](https://cybersecuritynews.com/) | 🔐 Cybersecurity |
+| [HackRead](https://hackread.com/) | 🕵️ Hacking & Security |
+| [The Hacker News](https://thehackernews.com/) | 💻 Infosec |
+| [BleepingComputer](https://www.bleepingcomputer.com/) | 🖥️ Security & Tech |
 
 ---
 
@@ -30,117 +32,161 @@
 
 | Requirement | Notes |
 |---|---|
-| **Node.js 18+** | Download from [nodejs.org](https://nodejs.org) (LTS version) |
-| **Google Chrome** | Already installed on most PCs — bot uses your existing Chrome |
+| **Node.js 18+** | [nodejs.org](https://nodejs.org) — LTS version |
+| **Google Chrome** | Already on most PCs — the bot uses your existing install |
 | **Gemini API Key** | Free at [aistudio.google.com](https://aistudio.google.com/apikey) |
-| **WhatsApp** | Any personal WhatsApp account (no Business account needed) |
+| **WhatsApp** *(optional)* | Any personal WhatsApp account |
+| **Telegram Bot** *(optional)* | Create one free via [@BotFather](https://t.me/BotFather) |
+
+> At least one platform (WhatsApp **or** Telegram) must be configured.
 
 ---
 
-## Setup
-
-### Step 1 — Clone & Install
+## Quick Start
 
 ```bash
 git clone https://github.com/cyberlog69/whatsapp-news-bot.git
 cd whatsapp-news-bot
 npm install
 npm approve-scripts puppeteer
-```
-
-> ⚠️ `npm install` downloads dependencies (~300MB including a headless browser). Wait for it to complete fully.
-
----
-
-### Step 2 — Configure `.env`
-
-```bash
-# Windows (PowerShell)
-Copy-Item .env.example .env
-```
-
-Open `.env` in any text editor and fill in:
-
-```env
-# WHERE TO SEND NEWS — pick ONE of the 3 options below:
-
-# Option 1: Your personal WhatsApp number (country code + number, no + or spaces)
-WHATSAPP_TARGET=919876543210
-
-# Option 2: WhatsApp Group name (must match exactly, case-insensitive)
-# WHATSAPP_TARGET=My Cyber News Group
-
-# Option 3: Group ID — most reliable (see "Sending to a Group" below)
-# WHATSAPP_TARGET=120363XXXXXXXXXXXXXXXXXX@g.us
-
-# Free Gemini API key from https://aistudio.google.com/apikey
-GEMINI_API_KEY=AIzaXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-```
-
----
-
-### Step 3 — Start the Bot
-
-```bash
+Copy-Item .env.example .env   # then open .env and fill in your details
 npm start
 ```
 
-**First run only:**
-1. A QR code appears in your terminal
-2. Open WhatsApp on your phone → **Linked Devices** → **Link a Device**
-3. Scan the QR code
-4. You'll see `✔ WhatsApp client READY`
-5. A startup notification is sent to your configured target
+---
 
-> ✅ After the first scan, your session is saved to `.wwebjs_auth/`. Future restarts don't need a QR scan.
+## Setup Guide
+
+### Step 1 — Configure `.env`
+
+Open `.env` and fill in whichever platforms you want:
+
+```env
+# ── WHATSAPP (optional) ───────────────────────────────
+WHATSAPP_TARGET=919876543210          # phone number
+# WHATSAPP_TARGET=My News Group       # group name
+# WHATSAPP_TARGET=120363XXX@g.us      # group ID (most reliable)
+
+# ── TELEGRAM (optional) ───────────────────────────────
+TELEGRAM_BOT_TOKEN=123456789:ABCDef...
+TELEGRAM_TARGET=@mychannel            # public channel
+# TELEGRAM_TARGET=-1001234567890      # private channel / group ID
+# TELEGRAM_TARGET=123456789           # personal chat ID
+
+# ── AI SUMMARIZATION ──────────────────────────────────
+GEMINI_API_KEY=AIzaSy...              # free at aistudio.google.com
+```
+
+You can enable **one or both** platforms — the bot handles it automatically.
 
 ---
 
-## Sending to a WhatsApp Group
+### Step 2 — Telegram Bot Setup
 
-To deliver news to a group instead of a personal number:
+> Skip this if you only want WhatsApp.
 
-**Step 1** — Start the bot once to link your WhatsApp (scan the QR code)
+**2a. Create your bot:**
+1. Open Telegram → search **@BotFather** → tap Start
+2. Send `/newbot` → pick a display name → pick a `username_bot`
+3. Copy the token: `123456789:ABCDefghIJKlmnoPQRstuvWXYz`
+4. Paste it as `TELEGRAM_BOT_TOKEN` in `.env`
 
-**Step 2** — Add the linked WhatsApp account to your group
+**2b. Find your chat/group/channel ID:**
 
-**Step 3** — Run the group finder:
 ```bash
-npm run list-groups
+npm run list-telegram-chats
 ```
 
-You'll see output like:
+This shows every chat your bot has seen. You'll get output like:
+
 ```
-   1. 👥 Cyber Security Alerts
-      ID: 120363XXXXXXXXXXXXXXXXXX@g.us
-      Members: 12
+   1. 📢 Cyber News Channel
+      ID:       -1001234567890
+      Type:     channel
+      Username: @cybernewschannel
 ```
 
-**Step 4** — Copy the ID into your `.env`:
+Copy the ID → set it as `TELEGRAM_TARGET` in `.env`.
+
+> **For channels:** Add your bot as an Administrator with "Post Messages" permission before running the script.
+> **For groups:** Add your bot to the group and send any message there first.
+
+---
+
+### Step 3 — WhatsApp Group Setup
+
+> Skip this if you only want Telegram.
+
+```bash
+npm start   # scan QR code → link your WhatsApp
+npm run list-groups   # find group IDs
+```
+
+Set your group ID in `.env`:
 ```env
 WHATSAPP_TARGET=120363XXXXXXXXXXXXXXXXXX@g.us
 ```
 
-**Step 5** — Restart the bot:
+Then restart: `npm start`
+
+---
+
+### Step 4 — Start the Bot
+
 ```bash
 npm start
 ```
 
-> 💡 You can also use the group **name** directly (e.g. `WHATSAPP_TARGET=Cyber Security Alerts`) and the bot will auto-resolve it to the ID.
+**WhatsApp first run:** A QR code appears → open WhatsApp → **Linked Devices → Link a Device** → scan it.
+
+**Telegram:** No scan needed — just validate the token and you're live.
+
+You'll receive a startup notification on all configured platforms confirming the bot is live.
+
+---
+
+## Sample Messages
+
+**WhatsApp:**
+```
+🔐 Cybersecurity  |  *Cyber Security News*
+━━━━━━━━━━━━━━━━━━━━━━━━━
+*Windows 0-Day Allows Privilege Escalation*
+
+• A critical kernel flaw allows attackers to gain SYSTEM-level access.
+• The vulnerability requires no user interaction to exploit.
+• Microsoft released an emergency patch — update immediately.
+
+🔗 https://cybersecuritynews.com/...
+⏰ _12 Jun 2026, 01:15 AM_
+━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Telegram:**
+```
+🔐 Cybersecurity  |  Cyber Security News
+━━━━━━━━━━━━━━━━━━━━━━━━━
+Windows 0-Day Allows Privilege Escalation
+
+▪ A critical kernel flaw allows attackers to gain SYSTEM-level access.
+▪ The vulnerability requires no user interaction to exploit.
+▪ Microsoft released an emergency patch — update immediately.
+
+🔗 Read full article
+⏰ 12 Jun 2026, 01:15 AM
+━━━━━━━━━━━━━━━━━━━━━━━━━
+```
 
 ---
 
 ## Adding More News Sources
 
-### Option A — Interactive CLI (easiest)
+### Option A — Interactive CLI
 ```bash
 npm run add-source
 ```
-Follow the prompts — name, website URL, RSS feed URL, and category emoji.
 
 ### Option B — Edit `config.json` directly
-Open `config.json` and add a new entry to the `sources` array:
-
 ```json
 {
   "name": "Krebs on Security",
@@ -150,39 +196,32 @@ Open `config.json` and add a new entry to the `sources` array:
   "enabled": true
 }
 ```
+Restart the bot after saving.
 
-Then restart: `npm start`
+### Finding RSS Feeds
+- Most sites: `https://example.com/feed/` or `/rss.xml`
+- Use [rss.app](https://rss.app) to generate feeds for sites without one
 
-### Finding RSS Feed URLs
-Most news sites publish RSS at `/feed/` or `/rss.xml`:
-- WordPress sites → `https://example.com/feed/`
-- Try appending `/feed`, `/rss`, or `/rss.xml` to the homepage URL
-- Or use [rss.app](https://rss.app) to generate a feed for sites without one
+---
 
-### Disabling a Source Temporarily
-Set `"enabled": false` for any source in `config.json` and restart.
+## All Commands
+
+| Command | Description |
+|---|---|
+| `npm start` | Start the bot (WhatsApp + Telegram) |
+| `npm run list-groups` | List WhatsApp groups to find group IDs |
+| `npm run list-telegram-chats` | List Telegram chats/groups/channels |
+| `npm run add-source` | Add a new RSS news source interactively |
 
 ---
 
 ## Configuration Reference (`config.json`)
 
-```json
-{
-  "sources": [ ... ],
-  "settings": {
-    "pollIntervalMinutes": 5,
-    "maxArticlesPerRun": 5,
-    "summaryBulletPoints": 3,
-    "delayBetweenMessagesSec": 3
-  }
-}
-```
-
 | Setting | Default | Description |
 |---|---|---|
 | `pollIntervalMinutes` | `5` | How often to check for new articles |
-| `maxArticlesPerRun` | `5` | Max articles to send per check (prevents flooding) |
-| `summaryBulletPoints` | `3` | Number of AI summary bullet points per article |
+| `maxArticlesPerRun` | `5` | Max articles sent per check (prevents flooding) |
+| `summaryBulletPoints` | `3` | Number of AI summary bullet points |
 | `delayBetweenMessagesSec` | `3` | Pause between WhatsApp messages |
 
 ---
@@ -191,75 +230,44 @@ Set `"enabled": false` for any source in `config.json` and restart.
 
 ```
 Every 5 minutes:
-  1. 📡 Fetch RSS feeds from all enabled sources
+  1. 📡 Fetch RSS feeds from all enabled sources (in parallel)
   2. 🔍 Filter out already-sent articles (JSON deduplication)
-  3. 🤖 Summarize each new article with Gemini AI
-       ├── Cache check: skip API call if already summarized
-       ├── Rate limiter: enforce 4.5s gap (stay under 15 req/min)
-       └── Retry logic: on 429, wait the API-specified delay and retry
-  4. 📱 Format for WhatsApp (bold, bullet points, emojis, dividers)
-  5. 💬 Send to your number / group / channel
-  6. 💾 Mark article as sent (never sent again)
+  3. 🤖 Summarize each article with Gemini AI
+       ├── Cache: skip API call if URL already summarized
+       ├── Rate limiter: 4.5s gap between calls (< 15 req/min)
+       └── Retry: on 429, waits the API-specified delay and retries
+  4. 📱 Format for WhatsApp (bold/italic markdown)
+  4. 📢 Format for Telegram (HTML — bold, links, italic)
+  5. 💬 Broadcast to WhatsApp + Telegram simultaneously
+  6. 💾 Mark as sent — never delivered twice
 ```
-
----
-
-## Sample WhatsApp Message
-
-```
-🔐 Cybersecurity  |  *Cyber Security News*
-━━━━━━━━━━━━━━━━━━━━━━━━━
-*Windows 0-Day Vulnerability Allows Privilege Escalation*
-
-• A critical zero-day flaw in the Windows kernel has been discovered by researchers.
-• Attackers can exploit the vulnerability to gain SYSTEM-level privileges without user interaction.
-• Microsoft has released an emergency patch — users should update immediately.
-
-🔗 https://cybersecuritynews.com/windows-0day/
-⏰ _11 Jun 2026, 10:05 PM_
-━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
----
-
-## Available Commands
-
-| Command | Description |
-|---|---|
-| `npm start` | Start the news bot |
-| `npm run list-groups` | List all WhatsApp groups to find group IDs |
-| `npm run add-source` | Add a new RSS news source interactively |
 
 ---
 
 ## Troubleshooting
 
-### QR code appears again on restart
-Your session expired. Delete the auth folder and re-scan:
+### WhatsApp QR appears again on restart
 ```powershell
 Remove-Item -Recurse -Force .wwebjs_auth
 npm start
 ```
 
-### `WHATSAPP_TARGET is not set`
-Make sure `.env` exists (not just `.env.example`) and contains `WHATSAPP_TARGET=...`
+### Chrome not found
+Install Chrome from [google.com/chrome](https://www.google.com/chrome) and restart.
 
-### Group not found
-1. Confirm the bot's linked WhatsApp number is a member of the group
-2. Run `npm run list-groups` to see exact group names and IDs
-3. Use the group ID (`@g.us`) in `.env` instead of the name — it's more reliable
+### WhatsApp group not found
+Run `npm run list-groups` — use the full `@g.us` ID instead of the group name.
+
+### Telegram: "chat not found"
+- Personal chat: send any message to your bot first
+- Group: add the bot to the group and send a message
+- Channel: add the bot as Admin with "Post Messages" permission
+
+### Telegram: "have no rights to send"
+In your Telegram channel: Administrators → your bot → enable "Post Messages".
 
 ### Gemini 429 quota errors
-The bot handles this automatically with retry + rate limiter. If you're consistently hitting the daily limit (1,500 req/day free), reduce `maxArticlesPerRun` in `config.json`:
-```json
-"maxArticlesPerRun": 2
-```
-Or upgrade to a paid Gemini plan at [aistudio.google.com](https://aistudio.google.com).
-
-### Chrome not found
-The bot automatically uses your installed Google Chrome. If Chrome isn't installed:
-1. Download Chrome from [google.com/chrome](https://www.google.com/chrome)
-2. Restart the bot
+The bot retries automatically. If you're consistently hitting limits, reduce `maxArticlesPerRun` in `config.json` to `2` or `3`.
 
 ---
 
@@ -267,37 +275,39 @@ The bot automatically uses your installed Google Chrome. If Chrome isn't install
 
 ```
 whatsapp-news-bot/
-├── index.js              ← Entry point — boots WhatsApp + runs scheduler
-├── config.json           ← News sources (add/remove sites here)
-├── add-source.js         ← CLI: npm run add-source
-├── list-groups.js        ← CLI: npm run list-groups
-├── .env                  ← Your secrets (never commit this!)
-├── .env.example          ← Template — copy to .env
+├── index.js                  ← Entry point — boots platforms + scheduler
+├── config.json               ← News sources (edit to add/remove sites)
+├── add-source.js             ← npm run add-source
+├── list-groups.js            ← npm run list-groups (WhatsApp)
+├── list-telegram-chats.js    ← npm run list-telegram-chats
+├── .env                      ← Your secrets (never commit!)
+├── .env.example              ← Template
 ├── package.json
 │
 ├── src/
-│   ├── fetcher.js        ← RSS feed fetcher (all sources in parallel)
-│   ├── deduplicator.js   ← JSON-based article history tracker
-│   ├── summarizer.js     ← Gemini AI (rate-limited, cached, retry-safe)
-│   ├── formatter.js      ← WhatsApp message formatter
-│   ├── sender.js         ← WhatsApp client (supports number / group / channel)
-│   ├── pipeline.js       ← Orchestrates the full fetch → send pipeline
-│   └── logger.js         ← Colored, timestamped console output
+│   ├── fetcher.js            ← RSS feed fetcher
+│   ├── deduplicator.js       ← JSON article history (no duplicates)
+│   ├── summarizer.js         ← Gemini AI (rate-limited + cached)
+│   ├── formatter.js          ← WhatsApp markdown + Telegram HTML
+│   ├── sender.js             ← WhatsApp client (whatsapp-web.js)
+│   ├── telegram-sender.js    ← Telegram bot client
+│   ├── pipeline.js           ← Orchestrates fetch → summarize → broadcast
+│   └── logger.js             ← Colored console output
 │
 ├── data/
-│   └── seen_articles.json  ← Auto-created — tracks sent articles
+│   └── seen_articles.json    ← Auto-created article history
 │
-└── .wwebjs_auth/           ← Auto-created — WhatsApp session (don't delete)
+└── .wwebjs_auth/             ← Auto-created WhatsApp session
 ```
 
 ---
 
 ## Security Notes
 
-- ✅ `.env` is in `.gitignore` — your API keys are never pushed to GitHub
-- ✅ `.wwebjs_auth/` is in `.gitignore` — your WhatsApp session stays local
-- ✅ `data/` is in `.gitignore` — article history stays local
-- ⚠️ Never share your `.env` file or `.wwebjs_auth/` folder with anyone
+- ✅ `.env` is gitignored — API keys never pushed to GitHub
+- ✅ `.wwebjs_auth/` is gitignored — WhatsApp session stays local
+- ✅ `data/` is gitignored — article history stays local
+- ⚠️ Never share your `.env` or `.wwebjs_auth/` folder
 
 ---
 

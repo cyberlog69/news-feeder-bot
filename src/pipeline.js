@@ -1,24 +1,34 @@
 // src/pipeline.js
 // Orchestrates the full news pipeline:
-//   Fetch → Deduplicate → Extract → Summarize → Format → Send
+//   Fetch → Deduplicate → Extract → Summarize → Format → Send (all platforms)
 
 const { fetchAllSources, getFullArticleText } = require('./fetcher');
 const { summarizeArticle }                     = require('./summarizer');
-const { formatArticle }                        = require('./formatter');
+const { formatArticle, formatArticleForTelegram } = require('./formatter');
 const Deduplicator                             = require('./deduplicator');
 const logger                                   = require('./logger');
 
 class NewsPipeline {
   /**
-   * @param {object} config  - Parsed config.json
-   * @param {object} sender  - WhatsAppSender instance
+   * @param {object}   config   - Parsed config.json
+   * @param {object[]} senders  - Array of { name, sender, type } objects
+   *                             type: 'whatsapp' | 'telegram'
+   *                             (also accepts a single sender object for backward compatibility)
    */
-  constructor(config, sender) {
-    this.sources       = config.sources;
-    this.settings      = config.settings;
-    this.sender        = sender;
-    this.deduplicator  = new Deduplicator();
-    this.isRunning     = false;   // prevent concurrent runs
+  constructor(config, senders) {
+    this.sources      = config.sources;
+    this.settings     = config.settings;
+    this.deduplicator = new Deduplicator();
+    this.isRunning    = false;
+
+    // Normalise: accept single sender or array
+    if (Array.isArray(senders)) {
+      this.senders = senders;
+    } else {
+      this.senders = [{ name: 'WhatsApp', sender: senders, type: 'whatsapp' }];
+    }
+
+    logger.info(`Pipeline ready — broadcasting to: ${this.senders.map((s) => s.name).join(', ')}`);
   }
 
   /**
@@ -49,12 +59,11 @@ class NewsPipeline {
         return;
       }
 
-      // Cap to avoid flooding
-      const cap      = this.settings.maxArticlesPerRun || 5;
-      const toSend   = newArticles.slice(0, cap);
+      const cap    = this.settings.maxArticlesPerRun || 5;
+      const toSend = newArticles.slice(0, cap);
       logger.info(`${newArticles.length} new articles found — sending up to ${cap}`);
 
-      // ── Steps 3–5: Process & Send ──────────────────────────────────────────
+      // ── Steps 3–5: Process & Broadcast ────────────────────────────────────
       let sentCount = 0;
 
       for (const article of toSend) {
@@ -62,38 +71,48 @@ class NewsPipeline {
           // 3a. Get full text if RSS snippet is too short
           let content = article.description;
           if (content.length < 150) {
-            logger.info(`Short snippet — extracting full text for: ${article.title.slice(0, 50)}`);
+            logger.info(`Extracting full text for: ${article.title.slice(0, 50)}`);
             const full = await getFullArticleText(article.url);
             if (full && full.length > content.length) content = full;
           }
 
-          // 3b. AI Summarize
+          // 3b. AI Summarize (shared across all platforms)
           const summary = await summarizeArticle(
             article.title,
             content,
             this.settings.summaryBulletPoints || 3,
-            article.url   // ← cache key: skip API if already summarized
+            article.url
           );
 
-          // 3c. Format
-          const message = formatArticle(article, summary);
+          // 3c. Format for each platform type
+          const whatsappMsg = formatArticle(article, summary);
+          const telegramMsg = formatArticleForTelegram(article, summary);
 
-          // 3d. Send via WhatsApp
-          await this.sender.sendMessage(message);
+          // 3d. Broadcast to all configured platforms
+          let anySentOk = false;
+          for (const { name, sender, type } of this.senders) {
+            try {
+              const message = type === 'telegram' ? telegramMsg : whatsappMsg;
+              await sender.sendMessage(message);
+              logger.success(`[${name}] Sent: ${article.title.slice(0, 55)}…`);
+              anySentOk = true;
+            } catch (err) {
+              logger.error(`[${name}] Send failed: ${err.message.split('\n')[0]}`);
+            }
+          }
 
-          // 3e. Mark as seen (only AFTER successful send)
-          this.deduplicator.markSeen(article.url, article.title, article.source);
-          sentCount++;
+          // 3e. Mark as seen only if at least one platform delivered it
+          if (anySentOk) {
+            this.deduplicator.markSeen(article.url, article.title, article.source);
+            sentCount++;
+          }
 
-          logger.success(`Sent [${article.source}]: ${article.title.slice(0, 65)}…`);
-
-          // Polite delay between messages so WhatsApp doesn't rate-limit us
+          // Polite delay between articles
           const delaySec = this.settings.delayBetweenMessagesSec || 3;
           await sleep(delaySec * 1000);
 
         } catch (err) {
-          logger.error(`Failed on article "${article.title.slice(0, 50)}": ${err.message}`);
-          // Continue with remaining articles
+          logger.error(`Failed processing "${article.title.slice(0, 50)}": ${err.message}`);
         }
       }
 
@@ -107,9 +126,8 @@ class NewsPipeline {
   }
 }
 
-/** Async sleep helper */
 function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 module.exports = NewsPipeline;
