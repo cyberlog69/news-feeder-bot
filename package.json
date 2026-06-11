@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "add-source": "node add-source.js"
+    "add-source": "node add-source.js",
+    "list-groups": "node list-groups.js"
   },
   "keywords": [
     "whatsapp",

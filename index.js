@@ -20,14 +20,17 @@ console.log('║   Cybersecurity & Tech News, delivered live  ║');
 console.log('╚══════════════════════════════════════════════╝\n');
 
 // ── Validate environment ──────────────────────────────────────────────────────
-const TARGET_NUMBER = process.env.WHATSAPP_TARGET_NUMBER;
+const TARGET   = process.env.WHATSAPP_TARGET;
 const GEMINI_KEY    = process.env.GEMINI_API_KEY;
 
-if (!TARGET_NUMBER) {
+if (!TARGET) {
   console.error(
-    '❌  WHATSAPP_TARGET_NUMBER is not set!\n' +
+    '❌  WHATSAPP_TARGET is not set!\n' +
     '    1. Copy .env.example → .env\n' +
-    '    2. Fill in your WhatsApp number (with country code, no + or spaces)\n' +
+    '    2. Set WHATSAPP_TARGET to one of:\n' +
+    '       • Your phone number: 919876543210\n' +
+    '       • A group name:      My Cyber News Group\n' +
+    '       • A group ID:        120363XXX@g.us  (run: node list-groups.js)\n' +
     '    3. Restart the bot.\n'
   );
   process.exit(1);
@@ -45,6 +48,7 @@ const enabledSources = config.sources.filter((s) => s.enabled);
 
 logger.info(`Loaded ${enabledSources.length} enabled news sources`);
 enabledSources.forEach((s) => logger.info(`  • ${s.name}  (${s.rss})`));
+logger.info(`Target: ${TARGET}` + (TARGET.includes('@') ? '' : ' (group name — will resolve after WhatsApp connects)'));
 
 // ── Initialize Gemini AI (optional) ──────────────────────────────────────────
 initGemini(GEMINI_KEY || '');
@@ -52,7 +56,7 @@ initGemini(GEMINI_KEY || '');
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   // 1. Start WhatsApp
-  const sender = new WhatsAppSender(TARGET_NUMBER);
+  const sender = new WhatsAppSender(TARGET);
   await sender.initialize();
   await sender.waitUntilReady();
 
