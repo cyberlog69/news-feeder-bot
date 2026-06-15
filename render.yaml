@@ -1,0 +1,51 @@
+# render.yaml — Render.com deployment configuration
+# https://render.com/docs/blueprint-spec
+#
+# ⚠️  WhatsApp note: Render's free tier has ephemeral storage.
+#    Use the persistent disk below (paid feature) for WhatsApp sessions.
+#    For free tier: use Telegram + Discord only (WHATSAPP_TARGET= leave blank).
+
+services:
+  - type: worker                 # background worker (no inbound HTTP needed)
+    name: news-feeder-bot
+    runtime: node
+    region: singapore            # closest to India — change to your preference
+    plan: starter                # free tier: 512MB RAM, shared CPU
+    # plan: standard             # paid: 2GB RAM, dedicated CPU
+
+    buildCommand: npm ci --omit=dev
+    startCommand: node index.js
+
+    # Auto-deploy on git push
+    autoDeploy: true
+
+    # Health check (requires web service type — switch to 'web' if you want this)
+    # healthCheckPath: /health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      # Set these in Render dashboard → Environment tab (keep secrets out of yaml)
+      - key: GEMINI_API_KEY
+        sync: false              # fill in Render dashboard
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_TARGET
+        sync: false
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
+      # Only needed if using WhatsApp (requires paid disk below)
+      # - key: WHATSAPP_TARGET
+      #   sync: false
+      # - key: WWEBJS_AUTH_PATH
+      #   value: /data/.wwebjs_auth
+
+    # Persistent disk (required for WhatsApp auth session + article history)
+    # ⚠️  Paid feature on Render ($0.25/GB/month)
+    # Comment out if using Telegram/Discord only
+    disk:
+      name: bot-persistent-data
+      mountPath: /app/data
+      sizeGB: 1

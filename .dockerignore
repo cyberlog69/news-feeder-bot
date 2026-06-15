@@ -1,0 +1,42 @@
+# .dockerignore — Files excluded from Docker build context
+# Keeps images small and prevents secrets from being baked in
+
+# Secrets and environment (NEVER in Docker image)
+.env
+.env.local
+.env.*.local
+
+# WhatsApp auth session (injected as volume at runtime)
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Runtime data (injected as volume at runtime)
+data/
+
+# Development dependencies
+node_modules/
+
+# Git history (not needed in image)
+.git/
+.gitignore
+
+# GitHub Actions
+.github/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Documentation (optional — comment out if you want docs in image)
+# README.md
+# DEPLOYMENT.md

@@ -1,0 +1,49 @@
+# fly.toml — Fly.io deployment configuration
+# https://fly.io/docs/reference/configuration/
+#
+# Free tier: 3 shared-CPU VMs, 256MB RAM each
+# Recommended: 1 VM with 512MB RAM for this bot
+
+app = "news-feeder-bot"        # change to your unique app name
+primary_region = "sin"         # Singapore (closest to India)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+
+[http_service]
+  internal_port = 3000
+  force_https   = true
+  auto_stop_machines  = false   # keep running 24/7 (don't stop when idle)
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type       = "connections"
+    hard_limit = 10
+    soft_limit = 5
+
+[[vm]]
+  memory = "512mb"              # 256mb minimum, 512mb recommended for puppeteer
+  cpu_kind = "shared"
+  cpus = 1
+
+# Health check endpoint
+[[services.http_checks]]
+  interval = 30000              # every 30s
+  timeout  = 5000
+  grace_period = "60s"         # give 60s for startup before checking
+  method   = "GET"
+  path     = "/health"
+
+# Persistent volume for WhatsApp auth + data
+[[mounts]]
+  source      = "newsbot_data"   # volume name (create with: fly volumes create newsbot_data)
+  destination = "/app/data"
+  initial_size = "1gb"
+
+# Secrets are set via CLI: fly secrets set GEMINI_API_KEY=xxx
+# Never put real secrets in fly.toml

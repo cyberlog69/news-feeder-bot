@@ -1,6 +1,9 @@
 // src/sender.js
 // WhatsApp client using whatsapp-web.js (unofficial library).
 //
+// Cross-platform Chrome detection: supports Windows, Linux (Docker/VPS), and macOS.
+// Override with CHROME_PATH env var for full control.
+//
 // Supports sending to:
 //   • A phone number    →  set WHATSAPP_TARGET=919876543210
 //   • A group by name  →  set WHATSAPP_TARGET=My Cyber News Group
@@ -10,22 +13,58 @@
 // After that: session saved to .wwebjs_auth/ — no re-scan needed.
 
 const fs     = require('fs');
+const path   = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const logger  = require('./logger');
 
-// ── Detect system Chrome ───────────────────────────────────────────────────────
+// ── Cross-platform Chrome detection ──────────────────────────────────────────
 function findChrome() {
+  // 1. Explicit override via environment variable (highest priority)
+  if (process.env.CHROME_PATH) {
+    try { if (fs.existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH; } catch {}
+    logger.warn(`CHROME_PATH set but not found: ${process.env.CHROME_PATH}`);
+  }
+
   const candidates = [
+    // ── Linux (Docker, Ubuntu, Debian, CentOS) ──────────────────────────
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/snap/bin/chromium',
+    '/usr/local/bin/chromium',
+    // ── macOS ────────────────────────────────────────────────────────────
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    // ── Windows ──────────────────────────────────────────────────────────
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    (process.env.LOCALAPPDATA || '') + '\\Google\\Chrome\\Application\\chrome.exe'
+    (process.env.LOCALAPPDATA || '') + '\\Google\\Chrome\\Application\\chrome.exe',
+    (process.env.PROGRAMFILES || '') + '\\Google\\Chrome\\Application\\chrome.exe',
   ];
+
   for (const p of candidates) {
-    try { if (fs.existsSync(p)) return p; } catch {}
+    try { if (p && fs.existsSync(p)) return p; } catch {}
   }
+
+  // 2. Try puppeteer's own bundled Chromium as last resort
+  try {
+    // eslint-disable-next-line
+    const puppeteer = require('puppeteer');
+    const bundled = puppeteer.executablePath();
+    if (bundled && fs.existsSync(bundled)) {
+      logger.info('Using puppeteer bundled Chromium');
+      return bundled;
+    }
+  } catch {}
+
   return null;
 }
+
+// ── WhatsApp auth directory ───────────────────────────────────────────────────
+// Allow override via env var for Docker volume mounts
+const AUTH_DATA_PATH = process.env.WWEBJS_AUTH_PATH || path.join(process.cwd(), '.wwebjs_auth');
 
 class WhatsAppSender {
   /**
@@ -33,36 +72,46 @@ class WhatsAppSender {
    *                          Set via WHATSAPP_TARGET in .env
    */
   constructor(target) {
-    this.target        = target.trim();
-    this.resolvedChatId = null;   // filled in after client is ready
-    this.isReady       = false;
-    this.client        = null;
-    this._readyResolve = null;
-    this._readyPromise = new Promise((resolve) => { this._readyResolve = resolve; });
+    this.target         = target.trim();
+    this.resolvedChatId = null;
+    this.isReady        = false;
+    this.client         = null;
+    this._readyResolve  = null;
+    this._readyPromise  = new Promise((resolve) => { this._readyResolve = resolve; });
   }
 
   /** Initialize the WhatsApp client and begin authentication. */
   async initialize() {
     const chromePath = findChrome();
     if (chromePath) {
-      logger.info(`Using system Chrome: ${chromePath}`);
+      logger.info(`Using Chrome: ${chromePath}`);
     } else {
-      logger.warn('System Chrome not found — puppeteer will try to auto-detect.');
+      logger.warn('Chrome not found — puppeteer will attempt auto-detection.');
     }
 
     this.client = new Client({
-      authStrategy: new LocalAuth({ clientId: 'news-bot' }),
+      authStrategy: new LocalAuth({
+        clientId:   'news-bot',
+        dataPath:   AUTH_DATA_PATH
+      }),
       puppeteer: {
-        headless: true,
+        headless:       true,
         executablePath: chromePath || undefined,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
+          '--disable-dev-shm-usage',       // critical for Docker (limited /dev/shm)
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--disable-gpu'
+          '--single-process',              // more stable in constrained environments
+          '--disable-gpu',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--metrics-recording-only',
+          '--mute-audio',
         ]
       }
     });
@@ -77,6 +126,12 @@ class WhatsAppSender {
       console.log('╚══════════════════════════════════════════════════╝\n');
       qrcode.generate(qr, { small: true });
       console.log('\n⏳  Waiting for you to scan...\n');
+
+      // On cloud deployments without a terminal, log a warning
+      if (process.env.NODE_ENV === 'production') {
+        logger.warn('CLOUD DEPLOYMENT: WhatsApp QR scan required!');
+        logger.warn('See DEPLOYMENT.md → "WhatsApp on Cloud" for instructions.');
+      }
     });
 
     this.client.on('loading_screen', (percent) => {
@@ -92,13 +147,12 @@ class WhatsAppSender {
       console.log('');
       logger.success('WhatsApp client READY');
 
-      // Resolve the target chat ID now that client is ready
       try {
         this.resolvedChatId = await this._resolveTarget(this.target);
         logger.success(`Messages will be sent to: ${this.target} (${this.resolvedChatId})`);
       } catch (err) {
-        logger.error(`Could not resolve target "${this.target}": ${err.message}`);
-        logger.warn('Run  node list-groups.js  to see available groups and their IDs.');
+        logger.error(`Could not resolve target "${this.target}": ${err.message.split('\n')[0]}`);
+        logger.warn('Run  npm run list-groups  to see available groups and their IDs.');
       }
 
       this.isReady = true;
@@ -124,40 +178,31 @@ class WhatsAppSender {
    *
    * Resolution order:
    *   1. Already a full chat ID (contains @)  →  use as-is
-   *   2. All digits                            →  treat as phone number → X@c.us
+   *   2. All digits                            →  phone number → X@c.us
    *   3. Anything else                         →  search group chats by name
    */
   async _resolveTarget(target) {
-    // 1. Already a chat ID (e.g. 120363XXX@g.us or 91XXXX@c.us)
-    if (target.includes('@')) {
-      return target;
-    }
+    if (target.includes('@')) return target;
 
-    // 2. All digits → phone number
-    if (/^\d+$/.test(target)) {
-      return target + '@c.us';
-    }
+    if (/^\d+$/.test(target)) return target + '@c.us';
 
-    // 3. Group name search
     logger.info(`Searching for group named "${target}"...`);
-    const chats = await this.client.getChats();
+    const chats  = await this.client.getChats();
     const groups = chats.filter((c) => c.isGroup);
 
     const match = groups.find(
       (g) => g.name.toLowerCase() === target.toLowerCase()
     );
-
     if (match) {
       logger.success(`Found group: "${match.name}" → ${match.id._serialized}`);
       return match.id._serialized;
     }
 
-    // Partial match fallback
     const partial = groups.find(
       (g) => g.name.toLowerCase().includes(target.toLowerCase())
     );
     if (partial) {
-      logger.warn(`Exact match not found. Using partial match: "${partial.name}" → ${partial.id._serialized}`);
+      logger.warn(`Partial match: "${partial.name}" → ${partial.id._serialized}`);
       return partial.id._serialized;
     }
 
@@ -173,25 +218,19 @@ class WhatsAppSender {
     return this._readyPromise;
   }
 
-  /**
-   * Send a text message to the configured target (number, group, or channel).
-   * @param {string} message
-   */
+  /** Send a text message to the configured target. */
   async sendMessage(message) {
-    if (!this.isReady) {
-      throw new Error('WhatsApp client not ready — cannot send message.');
-    }
+    if (!this.isReady) throw new Error('WhatsApp client not ready.');
     if (!this.resolvedChatId) {
       throw new Error(
         `Target "${this.target}" could not be resolved. ` +
-        'Run node list-groups.js to find the correct group name or ID.'
+        'Run npm run list-groups to find the correct group name or ID.'
       );
     }
-
     try {
       await this.client.sendMessage(this.resolvedChatId, message);
     } catch (err) {
-      throw new Error(`sendMessage to ${this.resolvedChatId} failed: ${err.message}`);
+      throw new Error(`sendMessage to ${this.resolvedChatId} failed: ${err.message.split('\n')[0]}`);
     }
   }
 
@@ -202,17 +241,15 @@ class WhatsAppSender {
     return chats
       .filter((c) => c.isGroup)
       .map((g) => ({
-        name: g.name,
-        id:   g.id._serialized,
+        name:         g.name,
+        id:           g.id._serialized,
         participants: g.participants?.length || '?'
       }));
   }
 
   /** Gracefully shut down the client. */
   async destroy() {
-    if (this.client) {
-      await this.client.destroy().catch(() => {});
-    }
+    if (this.client) await this.client.destroy().catch(() => {});
   }
 }
 

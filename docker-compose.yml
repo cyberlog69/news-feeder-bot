@@ -1,0 +1,82 @@
+# docker-compose.yml — News Feeder Bot v3.0
+#
+# Usage:
+#   docker-compose up -d          # start in background
+#   docker-compose logs -f        # follow logs
+#   docker-compose down           # stop
+#   docker-compose pull && docker-compose up -d   # update
+
+services:
+  news-feeder-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: news-feeder-bot:latest
+    container_name: news-feeder-bot
+
+    restart: unless-stopped   # auto-restart on crash or reboot
+
+    # Load secrets from .env file (never committed to git)
+    env_file:
+      - .env
+
+    # Override specific env vars for Docker environment
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # WhatsApp auth directory override (maps to the volume below)
+      - WWEBJS_AUTH_PATH=/app/.wwebjs_auth
+
+    ports:
+      # Dashboard + health check: http://localhost:3000
+      - "3000:3000"
+
+    volumes:
+      # ── Persistent data (IMPORTANT: do not remove these) ───────────────
+      # WhatsApp session — contains your auth tokens (survives restarts)
+      - whatsapp_auth:/app/.wwebjs_auth
+      # WhatsApp cache
+      - whatsapp_cache:/app/.wwebjs_cache
+      # Article history, summary cache, and log files
+      - bot_data:/app/data
+      # config.json — mount from host so you can edit without rebuild
+      - ./config.json:/app/config.json:ro
+
+    # Security: limit attack surface
+    security_opt:
+      - no-new-privileges:true
+
+    # Chromium/puppeteer needs these shared memory settings
+    shm_size: '256mb'
+
+    # Resource limits (adjust to your server)
+    deploy:
+      resources:
+        limits:
+          memory: 600M
+          cpus: '1.0'
+        reservations:
+          memory: 200M
+
+    # Health check via the /health endpoint
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Named volumes — Docker manages these on the host
+volumes:
+  whatsapp_auth:
+    name: newsbot_whatsapp_auth
+  whatsapp_cache:
+    name: newsbot_whatsapp_cache
+  bot_data:
+    name: newsbot_data

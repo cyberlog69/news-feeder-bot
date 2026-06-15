@@ -1,0 +1,98 @@
+name: CI — News Feeder Bot
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  # ── Job 1: Security and module checks ──────────────────────────────────────
+  check:
+    name: Security Audit & Module Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit (fail on high/critical)
+        run: npm audit --audit-level=high
+
+      - name: Verify all modules load without errors
+        run: |
+          node -e "
+            require('./src/logger');
+            require('./src/deduplicator');
+            require('./src/fetcher');
+            require('./src/summarizer');
+            require('./src/scorer');
+            require('./src/formatter');
+            require('./src/discord-sender');
+            require('./src/pipeline');
+            require('./src/web-dashboard');
+            console.log('✅ All modules OK');
+          "
+
+      - name: Check no secrets accidentally committed
+        run: |
+          # Fail if .env file was accidentally committed
+          if [ -f ".env" ]; then
+            echo "❌ ERROR: .env file found in repository! Remove it immediately."
+            exit 1
+          fi
+          echo "✅ No .env file committed"
+
+      - name: Verify config.json is valid JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('config.json','utf-8')); console.log('✅ config.json is valid JSON');"
+
+  # ── Job 2: Docker build test ─────────────────────────────────────────────────
+  docker-build:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    needs: check   # only run if check passes
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: news-feeder-bot:ci
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+          # Don't run the full build in CI (puppeteer Chromium download is slow)
+          # Just verify the Dockerfile syntax and layer structure
+          target: deps
+
+  # ── Job 3: (Optional) Auto-deploy to Railway ────────────────────────────────
+  # Uncomment and add RAILWAY_TOKEN secret to enable auto-deploy on push.
+  #
+  # deploy-railway:
+  #   name: Deploy to Railway
+  #   runs-on: ubuntu-latest
+  #   needs: [check, docker-build]
+  #   if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Install Railway CLI
+  #       run: npm install -g @railway/cli
+  #     - name: Deploy
+  #       run: railway up --detach
+  #       env:
+  #         RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
