@@ -1,19 +1,21 @@
 // src/fetcher.js
 // Fetches news articles from RSS feeds.
-// Falls back to article-extractor if the RSS snippet is too short to summarize.
 //
-// Security hardening:
-//   - All RSS/article URLs are validated (https/http only, no file:// or SSRF)
-//   - Content fields are capped in length before leaving this module
-//   - Private IP ranges are blocked to prevent SSRF against internal networks
+// Performance:
+//   - ETag / Last-Modified caching: sends conditional HTTP requests.
+//     If the feed hasn't changed (304), returns cached articles — no re-parse.
+//   - Parallel fetch of all enabled sources via Promise.allSettled
+//
+// Security:
+//   - All RSS/article URLs are validated (https/http only, no SSRF)
+//   - Private IP ranges are blocked
+//   - Content fields are capped in length
 
 const Parser  = require('rss-parser');
 const { extract } = require('@extractus/article-extractor');
 const logger  = require('./logger');
 
 // ── SSRF Protection ───────────────────────────────────────────────────────────
-
-// Block private/internal IP ranges (SSRF protection)
 const PRIVATE_IP_PATTERNS = [
   /^localhost$/i,
   /^127\./,
@@ -26,34 +28,30 @@ const PRIVATE_IP_PATTERNS = [
   /^fe80:/i,
 ];
 
-/**
- * Validate that a URL is safe to fetch:
- *   - Must be http or https
- *   - Must not target private/internal IP ranges
- * @param {string} url
- * @returns {boolean}
- */
 function isSafeUrl(url) {
   try {
     const parsed = new URL(url);
-    // Only allow http and https
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    // Block private IP ranges
     const hostname = parsed.hostname;
     if (PRIVATE_IP_PATTERNS.some((p) => p.test(hostname))) return false;
     return true;
   } catch {
-    return false; // malformed URL
+    return false;
   }
 }
 
+// ── ETag / Last-Modified cache ────────────────────────────────────────────────
+// Stores { etag, lastModified, articles } per RSS URL so we can skip re-fetching
+// unchanged feeds (saves bandwidth + CPU on every 5-minute tick).
+const etagCache = new Map();
+
+const USER_AGENT =
+  'Mozilla/5.0 (compatible; NewsFeederBot/2.0; +https://github.com/cyberlog69/news-feeder-bot)';
+
+// rss-parser instance — used for parseString() after we handle HTTP ourselves
 const parser = new Parser({
   timeout: 15000,
-  headers: {
-    'User-Agent':
-      'Mozilla/5.0 (compatible; NewsFeederBot/2.0; +https://github.com/cyberlog69/news-feeder-bot)'
-  },
-  // Handle Atom + RSS
+  headers: { 'User-Agent': USER_AGENT },
   customFields: {
     item: [
       ['media:content', 'mediaContent'],
@@ -64,48 +62,87 @@ const parser = new Parser({
 
 /**
  * Fetch the latest articles from a single RSS source.
- * Returns an array of article objects.
+ * Uses conditional requests (ETag/Last-Modified) to skip unchanged feeds.
  */
 async function fetchSource(source) {
-  // SSRF: validate RSS URL before fetching
   if (!isSafeUrl(source.rss)) {
-    logger.warn(`Skipping source "${source.name}": invalid or unsafe RSS URL: ${source.rss}`);
+    logger.warn(`Skipping source "${source.name}": invalid or unsafe RSS URL`);
     return [];
   }
 
   try {
     logger.info(`Fetching: ${source.name}`);
-    const feed = await parser.parseURL(source.rss);
 
-    return feed.items.slice(0, 15).map((item) => {
+    // Build conditional request headers
+    const cached    = etagCache.get(source.rss);
+    const reqHeaders = { 'User-Agent': USER_AGENT };
+    if (cached?.etag)         reqHeaders['If-None-Match']     = cached.etag;
+    if (cached?.lastModified) reqHeaders['If-Modified-Since'] = cached.lastModified;
+
+    // Use native fetch so we can read response headers ourselves
+    const controller = new AbortController();
+    const timer      = setTimeout(() => controller.abort(), 15000);
+    let res;
+    try {
+      res = await fetch(source.rss, { headers: reqHeaders, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    // 304 Not Modified — feed hasn't changed, use cached articles
+    if (res.status === 304 && cached?.articles?.length > 0) {
+      logger.info(`  ${source.name}: not modified (served from cache)`);
+      return cached.articles;
+    }
+
+    if (!res.ok) {
+      logger.error(`Failed to fetch ${source.name}: HTTP ${res.status}`);
+      return cached?.articles || [];
+    }
+
+    // Parse feed from response body text
+    const text = await res.text();
+    const feed = await parser.parseString(text);
+
+    // Map to our article shape
+    const articles = feed.items.slice(0, 15).map((item) => {
       const rawContent =
         item.contentSnippet ||
         item.contentEncoded ||
         item.content ||
         item.summary ||
         '';
-
       const url = item.link || item.guid || '';
 
       return {
-        title:       cleanText(item.title || 'No Title').slice(0, 300),    // cap title
-        url:         isSafeUrl(url) ? url : '',                             // SSRF: validate item URL
-        description: cleanText(rawContent).slice(0, 5000),                  // cap description
+        title:       cleanText(item.title || 'No Title').slice(0, 300),
+        url:         isSafeUrl(url) ? url : '',
+        description: cleanText(rawContent).slice(0, 5000),
         publishedAt: item.pubDate || item.isoDate || new Date().toISOString(),
         source:      source.name,
         category:    source.category
       };
-    }).filter((a) => a.url);  // drop articles with invalid/empty URLs
+    }).filter((a) => a.url);
+
+    // Update ETag cache for next request
+    etagCache.set(source.rss, {
+      etag:         res.headers.get('etag')          || null,
+      lastModified: res.headers.get('last-modified') || null,
+      articles
+    });
+
+    return articles;
 
   } catch (err) {
-    logger.error(`Failed to fetch ${source.name}: ${err.message}`);
-    return [];
+    // On error, return whatever we cached last so the bot keeps working
+    const cached = etagCache.get(source.rss);
+    logger.error(`Failed to fetch ${source.name}: ${err.message.split('\n')[0]}`);
+    return cached?.articles || [];
   }
 }
 
 /**
  * Fetch all enabled sources in parallel.
- * Returns a flat array of all articles found.
  */
 async function fetchAllSources(sources) {
   const enabled = sources.filter((s) => s.enabled);
@@ -125,21 +162,18 @@ async function fetchAllSources(sources) {
 
 /**
  * Attempt to extract full article text from a URL.
- * Returns plain text string, or null on failure.
  * SSRF: URL is validated before fetching.
  */
 async function getFullArticleText(url) {
-  // SSRF: re-validate the article URL before fetching
   if (!isSafeUrl(url)) return null;
 
   try {
     const article = await extract(url, {}, { timeout: 12000 });
     if (!article?.content) return null;
 
-    // Strip HTML tags and collapse whitespace — cap at 5000 chars
     return article.content
-      .replace(/<[^>]{0,500}>/g, ' ')    // bounded tag regex (prevents ReDoS)
-      .replace(/&[a-z]{1,10};/gi, ' ')   // bounded entity regex
+      .replace(/<[^>]{0,500}>/g, ' ')
+      .replace(/&[a-z]{1,10};/gi, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 5000);
@@ -148,11 +182,11 @@ async function getFullArticleText(url) {
   }
 }
 
-/** Strip HTML and collapse whitespace from a string */
+/** Strip HTML and collapse whitespace */
 function cleanText(str) {
   return String(str || '')
-    .replace(/<[^>]{0,500}>/g, ' ')     // bounded regex (prevents ReDoS)
-    .replace(/&[a-z]{1,10};/gi, ' ')    // bounded entity regex
+    .replace(/<[^>]{0,500}>/g, ' ')
+    .replace(/&[a-z]{1,10};/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

@@ -33,7 +33,45 @@
     "pollIntervalMinutes": 5,
     "maxArticlesPerRun": 5,
     "summaryBulletPoints": 3,
-    "delayBetweenMessagesSec": 3
+    "delayBetweenMessagesSec": 3,
+    "healthCheckHour": 8,
+    "dashboardPort": 3000
+  },
+  "filters": {
+    "enabled": false,
+    "keywords": ["ransomware", "zero-day", "CVE", "data breach", "RCE", "exploit", "vulnerability", "phishing", "malware"],
+    "mode": "include",
+    "_comment": "mode: 'include' = only send articles matching keywords. 'exclude' = skip matching articles. Set enabled:true to activate."
+  },
+  "digest": {
+    "enabled": false,
+    "sendAt": "08:00",
+    "timezone": "Asia/Kolkata",
+    "_comment": "Daily digest bundles all daily articles into one message sent at sendAt time. Set enabled:true to activate. Individual article delivery is disabled while digest is on."
+  },
+  "routing": {
+    "_comment": "Optional: map source names to specific platform arrays. Leave empty object to broadcast all articles to all platforms.",
+    "_example_disabled": {
+      "BleepingComputer": ["whatsapp"],
+      "The Hacker News": ["telegram"],
+      "HackRead": ["whatsapp", "telegram", "discord"]
+    }
+  },
+  "scoring": {
+    "enabled": false,
+    "minScore": 0.3,
+    "_comment": "Article importance scoring 0.0–1.0. Only articles with score >= minScore are sent. Factors: source reputation, recency, keyword matches, description length."
+  },
+  "severity": {
+    "enabled": true,
+    "keywords": [
+      "zero-day", "0-day", "critical vulnerability", "critical severity",
+      "remote code execution", "RCE", "ransomware", "actively exploited",
+      "emergency patch", "data breach", "millions exposed", "backdoor",
+      "nation-state", "supply chain attack", "authentication bypass",
+      "privilege escalation", "worm", "critical patch"
+    ],
+    "_comment": "Articles whose title matches any severity keyword get a 🚨 CRITICAL ALERT badge."
   },
   "_addMoreSources": "Run 'npm run add-source' to interactively add a new news source, OR manually add an entry to the 'sources' array above following the same format."
 }
