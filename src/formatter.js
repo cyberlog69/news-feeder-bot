@@ -110,7 +110,7 @@ function formatStartupMessage(sourceNames, intervalMin) {
     ...sourceNames.map((n) => `   ✅ ${escWA(n)}`),
     '',
     `🔄 Checking every *${intervalMin} minutes*`,
-    `🤖 Gemini AI summarization: active`,
+    `🤖 AI summarization: active (${process.env.SUMMARIZER_PROVIDER || 'groq'})`,
     `📝 Logs saved to: data/logs/`,
     divider,
     `_Articles will be delivered as soon as they're published._`
@@ -222,7 +222,7 @@ function formatStartupMessageForTelegram(sourceNames, intervalMin) {
     ...sourceNames.map((n) => `   ✅ ${esc(n)}`),
     '',
     `🔄 Checking every <b>${esc(String(intervalMin))}</b> minutes`,
-    `🤖 Gemini AI summarization: active`,
+    `🤖 AI summarization: active (${process.env.SUMMARIZER_PROVIDER || 'groq'})`,
     `📝 Logs saved to: data/logs/`,
     divider,
     `<i>Articles will be delivered as soon as they're published.</i>`

@@ -351,18 +351,72 @@ Automatically starts at **http://localhost:3000** when the bot runs.
 
 ## 🤖 AI Summarization
 
-| Setting | Value |
-|---|---|
-| Model | `gemini-2.0-flash-lite` (higher free-tier quota than flash) |
-| Rate limit | 8s minimum gap between API calls |
-| Retry | Auto-retry on 429 with API-specified wait time (up to 3 attempts) |
-| Cache | Summaries saved to `data/summary_cache.json` — survive restarts |
-| Fallback | Extracts top sentences from article text if Gemini unavailable |
-| Labels | Each article shows `🤖 AI summary` or `📄 auto-extracted` |
+Choose your provider by setting `SUMMARIZER_PROVIDER` in `.env`. The bot auto-falls back to extractive summarization if the API fails — articles always get delivered.
 
-Get a free API key at [aistudio.google.com](https://aistudio.google.com) → **Get API Key**.
+### Provider Comparison
 
----
+| Provider | Cost | Free Limit | Quality | Setup |
+|---|---|---|---|---|
+| **Groq** *(default)* | 🆓 Free | 14,400 req/day | ⭐⭐⭐⭐ | API key — no CC needed |
+| **Ollama** | 🆓 Forever free | Unlimited | ⭐⭐⭐⭐ | Install app locally |
+| **HuggingFace** | 🆓 Free tier | Rate-limited | ⭐⭐⭐⭐⭐ | API key — free account |
+| **OpenRouter** | 🆓 Free tier | Varies by model | ⭐⭐⭐⭐ | API key — free account |
+| **Gemini** | 🆓 Free tier | 1,500 req/day | ⭐⭐⭐⭐ | API key — free account |
+| **Extractive** | 🆓 Zero cost | Unlimited | ⭐⭐⭐ | Nothing needed |
+
+### Setup by Provider
+
+#### 🟢 Groq (Recommended)
+```env
+SUMMARIZER_PROVIDER=groq
+GROQ_API_KEY=gsk_xxxx
+GROQ_MODEL=llama-3.1-8b-instant   # or: llama-3.3-70b-versatile, mixtral-8x7b-32768
+```
+Get free key (no credit card): [console.groq.com](https://console.groq.com)
+
+#### 🏠 Ollama (Local — private, unlimited)
+```bash
+# Install from https://ollama.com, then:
+ollama pull llama3.2
+```
+```env
+SUMMARIZER_PROVIDER=ollama
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2   # or: mistral, phi3, gemma2
+```
+
+#### 🤗 HuggingFace
+```env
+SUMMARIZER_PROVIDER=huggingface
+HF_API_KEY=hf_xxxx
+HF_MODEL=facebook/bart-large-cnn   # purpose-built summarization model
+```
+Get free token: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+
+#### 🔀 OpenRouter (100+ free models)
+```env
+SUMMARIZER_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-xxxx
+OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct:free
+```
+Get free key: [openrouter.ai](https://openrouter.ai)
+
+#### 💎 Gemini (Original)
+```env
+SUMMARIZER_PROVIDER=gemini
+GEMINI_API_KEY=AIza_xxxx
+```
+Get free key: [aistudio.google.com](https://aistudio.google.com)
+
+#### 📄 Extractive (No AI)
+```env
+SUMMARIZER_PROVIDER=extractive
+# No key needed — extracts top sentences from the article directly
+```
+
+> **Cache:** All providers share the same `data/summary_cache.json` — summaries survive restarts and never repeat API calls for the same article.
+
+
 
 ## 🔒 Security
 
@@ -428,7 +482,7 @@ Get a free API key at [aistudio.google.com](https://aistudio.google.com) → **G
 |---|---|
 | WhatsApp QR keeps reappearing | Delete `.wwebjs_auth/` and restart to get a fresh QR |
 | Chrome not found | Install Google Chrome, or set `CHROME_PATH=/path/to/chrome` in `.env` |
-| Gemini 429 quota errors | Normal — bot retries automatically. Or increase `pollIntervalMinutes` |
+| AI provider 429 / quota errors | Bot retries automatically. Switch provider (`SUMMARIZER_PROVIDER=groq` or `=extractive`) |
 | Telegram "chat not found" | Run `npm run list-telegram-chats` to find the correct ID |
 | Discord articles not sending | Verify `DISCORD_WEBHOOK_URL` in `.env`; regenerate webhook if needed |
 | "No platform configured" | Set at least one: `WHATSAPP_TARGET`, `TELEGRAM_BOT_TOKEN`, or `DISCORD_WEBHOOK_URL` |

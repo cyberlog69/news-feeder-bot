@@ -19,7 +19,7 @@ const WhatsAppSender  = require('./src/sender');
 const TelegramSender  = require('./src/telegram-sender');
 const DiscordSender   = require('./src/discord-sender');
 const NewsPipeline    = require('./src/pipeline');
-const { initGemini }  = require('./src/summarizer');
+const { initSummarizer } = require('./src/summarizer');
 const {
   formatStartupMessage,
   formatStartupMessageForTelegram,
@@ -44,7 +44,7 @@ console.log('╚═════════════════════�
 const WA_TARGETS_RAW  = process.env.WHATSAPP_TARGET  || '';
 const TG_TOKEN        = process.env.TELEGRAM_BOT_TOKEN;
 const TG_TARGETS_RAW  = process.env.TELEGRAM_TARGET  || '';
-const GEMINI_KEY      = process.env.GEMINI_API_KEY;
+const SUMMARIZER      = (process.env.SUMMARIZER_PROVIDER || 'groq').toLowerCase();
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK_URL;
 const DISCORD_NAME    = process.env.DISCORD_USERNAME  || '📰 News Feeder Bot';
 const DISCORD_AVATAR  = process.env.DISCORD_AVATAR_URL || null;
@@ -84,8 +84,8 @@ try {
 logger.info(`Loaded ${enabledSources.length} enabled news sources`);
 enabledSources.forEach((s) => logger.info(`  • ${s.name}  (${s.rss})`));
 
-// ── Gemini AI ─────────────────────────────────────────────────────────────────
-initGemini(GEMINI_KEY || '');
+// ── AI Summarizer ─────────────────────────────────────────────────────────────
+initSummarizer();
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
