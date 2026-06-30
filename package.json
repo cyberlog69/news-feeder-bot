@@ -4,44 +4,46 @@
   "description": "Automated cybersecurity & tech news delivery to WhatsApp, Telegram, and Discord",
   "main": "index.js",
   "scripts": {
-    "start":              "node index.js",
-    "start:prod":         "NODE_ENV=production node index.js",
-    "dev":                "node --watch index.js",
-
-    "pm2:start":          "pm2 start ecosystem.config.js --env production",
-    "pm2:stop":           "pm2 stop news-feeder-bot",
-    "pm2:restart":        "pm2 restart news-feeder-bot",
-    "pm2:reload":         "pm2 reload news-feeder-bot",
-    "pm2:logs":           "pm2 logs news-feeder-bot",
-    "pm2:monit":          "pm2 monit",
-    "pm2:delete":         "pm2 delete news-feeder-bot",
-
-    "docker:build":       "docker build -t news-feeder-bot .",
-    "docker:up":          "docker-compose up -d",
-    "docker:down":        "docker-compose down",
-    "docker:logs":        "docker-compose logs -f",
-    "docker:restart":     "docker-compose restart",
-    "docker:pull":        "docker-compose pull",
-
-    "add-source":         "node add-source.js",
-    "list-groups":        "node list-groups.js",
-    "list-telegram-chats":"node list-telegram-chats.js",
-
-    "audit":              "npm audit",
-    "audit:fix":          "npm audit fix"
+    "start": "node index.js",
+    "start:prod": "NODE_ENV=production node index.js",
+    "dev": "node --watch index.js",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:stop": "pm2 stop news-feeder-bot",
+    "pm2:restart": "pm2 restart news-feeder-bot",
+    "pm2:reload": "pm2 reload news-feeder-bot",
+    "pm2:logs": "pm2 logs news-feeder-bot",
+    "pm2:monit": "pm2 monit",
+    "pm2:delete": "pm2 delete news-feeder-bot",
+    "docker:build": "docker build -t news-feeder-bot .",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:restart": "docker-compose restart",
+    "docker:pull": "docker-compose pull",
+    "add-source": "node add-source.js",
+    "list-groups": "node list-groups.js",
+    "list-telegram-chats": "node list-telegram-chats.js",
+    "audit": "npm audit",
+    "audit:fix": "npm audit fix"
   },
   "keywords": [
-    "whatsapp", "telegram", "discord",
-    "news", "automation", "cybersecurity", "rss", "bot"
+    "whatsapp",
+    "telegram",
+    "discord",
+    "news",
+    "automation",
+    "cybersecurity",
+    "rss",
+    "bot"
   ],
   "dependencies": {
     "@extractus/article-extractor": "^8.0.0",
-    "@google/generative-ai":        "^0.21.0",
-    "dotenv":                       "^16.4.5",
-    "node-cron":                    "^4.2.1",
-    "qrcode-terminal":              "^0.12.0",
-    "rss-parser":                   "^3.13.0",
-    "whatsapp-web.js":              "^1.23.0"
+    "@google/generative-ai": "^0.24.1",
+    "dotenv": "^17.4.2",
+    "node-cron": "^4.5.0",
+    "qrcode-terminal": "^0.12.0",
+    "rss-parser": "^3.13.0",
+    "whatsapp-web.js": "^1.23.0"
   },
   "engines": {
     "node": ">=18.0.0"

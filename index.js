@@ -10,7 +10,7 @@
 //   - Web dashboard: local browser UI at http://localhost:PORT
 //   - Graceful shutdown: flushes deduplicator to disk before exit
 
-require('dotenv').config();
+require('dotenv').config({ quiet: true }); // quiet:true suppresses dotenv v17 runtime log
 
 const path            = require('path');
 const fs              = require('fs');
