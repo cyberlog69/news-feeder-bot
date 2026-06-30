@@ -3,7 +3,7 @@
 # 📰 News Feeder Bot
 
 ### Automated cybersecurity & tech news — delivered to WhatsApp, Telegram, and Discord
-#### AI-powered summaries · keyword filtering · severity alerts · live dashboard · production-ready
+#### Multi-provider AI summaries · keyword filtering · severity alerts · live dashboard · production-ready
 
 [![CI](https://github.com/cyberlog69/news-feeder-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/cyberlog69/news-feeder-bot/actions)
 [![Security](https://img.shields.io/badge/npm%20audit-0%20vulnerabilities-brightgreen)](https://npmjs.com)
@@ -17,6 +17,7 @@
 
 ## 📌 Table of Contents
 
+- [What's New](#-whats-new)
 - [Features](#-features)
 - [Quick Start](#-quick-start)
 - [Platform Setup](#-platform-setup)
@@ -32,6 +33,20 @@
 
 ---
 
+## 🆕 What's New
+
+### v3.1 — Multi-Provider AI & Security Hardening
+| Change | Details |
+|---|---|
+| 🤖 **Multi-Provider AI** | Choose from Groq, Ollama, HuggingFace, OpenRouter, Gemini, or Extractive (no AI). Groq is now the default — 14,400 free req/day, no credit card |
+| 🔄 **Auto-fallback** | If the configured AI provider fails, the bot automatically falls back to extractive summarization — articles always get delivered |
+| 💾 **Shared summary cache** | All providers share `data/summary_cache.json` — switching providers doesn't waste API calls |
+| 🔐 **dotenv v17** | Updated to dotenv 17.4.2, node-cron 4.5.0, @google/generative-ai 0.24.1 — **0 vulnerabilities** across all 232 packages |
+| 🔍 **Static security scanner** | Added `scripts/scan.js` — runs pattern-based security checks across all source files |
+| ☁️ **Production deployment** | Docker, PM2, Railway, Render, Fly.io, Oracle Cloud configs — all in repo |
+
+---
+
 ## ✨ Features
 
 | Feature | Description |
@@ -39,7 +54,7 @@
 | 📱 **WhatsApp Delivery** | Send to personal chats, groups, or channels — multi-target supported |
 | ✈️ **Telegram Delivery** | Send to channels, groups, or DMs — native Bot API, no extra libs |
 | 🎮 **Discord Delivery** | Rich embeds via webhooks — severity color-coded, zero dependencies |
-| 🤖 **Gemini AI Summaries** | `gemini-2.0-flash-lite` bullet summaries with persistent caching |
+| 🤖 **Multi-Provider AI** | Choose: Groq, Ollama, HuggingFace, OpenRouter, Gemini, or Extractive — auto-fallback if API fails |
 | 🎯 **Keyword Filtering** | Include or exclude articles by keywords (e.g. `ransomware`, `CVE`) |
 | 🚨 **Severity Alerts** | Auto `🚨 CRITICAL ALERT` badge for zero-days, RCE, active exploits |
 | 📋 **Daily Digest** | Bundle all articles into one daily message at a scheduled time |
@@ -63,7 +78,7 @@
 ### Prerequisites
 - **Node.js 18+** → [nodejs.org](https://nodejs.org)
 - **Google Chrome** → [google.com/chrome](https://google.com/chrome) *(WhatsApp only)*
-- **Gemini API Key** → [aistudio.google.com](https://aistudio.google.com) *(free)*
+- **AI API Key** *(optional)* → Get a free [Groq key](https://console.groq.com) (default) — or use `SUMMARIZER_PROVIDER=extractive` for no AI at all
 
 ### 3-Step Setup
 ```bash
@@ -83,6 +98,8 @@ npm start
 **WhatsApp first run:** scan the QR code shown in terminal with WhatsApp → Linked Devices → Link a Device. Session is saved automatically for all future runs.
 
 > **Telegram or Discord only?** No QR code needed — just set your bot token and run.
+
+> **No AI key?** Set `SUMMARIZER_PROVIDER=extractive` in `.env` — the bot extracts article sentences directly, no API required.
 
 ---
 
@@ -265,7 +282,7 @@ npm install -g flyctl
 fly auth login
 fly launch --no-deploy
 fly volumes create newsbot_data --size 1 --region sin
-fly secrets set GEMINI_API_KEY=xxx TELEGRAM_BOT_TOKEN=xxx TELEGRAM_TARGET=@channel
+fly secrets set GROQ_API_KEY=xxx TELEGRAM_BOT_TOKEN=xxx TELEGRAM_TARGET=@channel
 fly deploy
 ```
 
@@ -289,7 +306,7 @@ news-feeder-bot/
 ├── src/
 │   ├── pipeline.js             # Orchestrates: fetch → filter → score → summarize → send
 │   ├── fetcher.js              # RSS fetcher with ETag/Last-Modified caching
-│   ├── summarizer.js           # Gemini AI with persistent cache + retry logic
+│   ├── summarizer.js           # Multi-provider AI (Groq/Ollama/HF/OpenRouter/Gemini/Extractive)
 │   ├── scorer.js               # Article importance scoring (0.0–1.0)
 │   ├── formatter.js            # Message formatting for WhatsApp, Telegram, Discord
 │   ├── sender.js               # WhatsApp client (cross-platform Chrome detection)
@@ -298,6 +315,9 @@ news-feeder-bot/
 │   ├── deduplicator.js         # Seen-article tracking with debounced disk writes
 │   ├── web-dashboard.js        # Dashboard + /health + /metrics endpoints
 │   └── logger.js               # Colored console + daily rotating log files
+│
+├── scripts/
+│   └── scan.js                 # Static security scanner (pattern-based code audit)
 │
 ├── add-source.js               # Interactive CLI to add RSS sources
 ├── list-groups.js              # WhatsApp group ID finder
@@ -310,7 +330,8 @@ news-feeder-bot/
 ├── render.yaml                 # Render.com blueprint
 ├── fly.toml                    # Fly.io deployment config
 ├── .github/workflows/ci.yml    # GitHub Actions CI (audit + module checks)
-└── DEPLOYMENT.md               # Complete deployment guide for all platforms
+├── DEPLOYMENT.md               # Complete deployment guide for all platforms
+└── .env.example                # All environment variables documented
 ```
 
 ---
@@ -366,15 +387,15 @@ Choose your provider by setting `SUMMARIZER_PROVIDER` in `.env`. The bot auto-fa
 
 ### Setup by Provider
 
-#### 🟢 Groq (Recommended)
+#### 🟢 Groq (Recommended — 14,400 free req/day, no credit card)
 ```env
 SUMMARIZER_PROVIDER=groq
 GROQ_API_KEY=gsk_xxxx
 GROQ_MODEL=llama-3.1-8b-instant   # or: llama-3.3-70b-versatile, mixtral-8x7b-32768
 ```
-Get free key (no credit card): [console.groq.com](https://console.groq.com)
+Get free key: [console.groq.com](https://console.groq.com)
 
-#### 🏠 Ollama (Local — private, unlimited)
+#### 🏠 Ollama (Local — private, unlimited, no API key)
 ```bash
 # Install from https://ollama.com, then:
 ollama pull llama3.2
@@ -385,7 +406,7 @@ OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2   # or: mistral, phi3, gemma2
 ```
 
-#### 🤗 HuggingFace
+#### 🤗 HuggingFace (Best model quality for summarization)
 ```env
 SUMMARIZER_PROVIDER=huggingface
 HF_API_KEY=hf_xxxx
@@ -393,7 +414,7 @@ HF_MODEL=facebook/bart-large-cnn   # purpose-built summarization model
 ```
 Get free token: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
 
-#### 🔀 OpenRouter (100+ free models)
+#### 🔀 OpenRouter (100+ free models via one API)
 ```env
 SUMMARIZER_PROVIDER=openrouter
 OPENROUTER_API_KEY=sk-or-xxxx
@@ -401,37 +422,39 @@ OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct:free
 ```
 Get free key: [openrouter.ai](https://openrouter.ai)
 
-#### 💎 Gemini (Original)
+#### 💎 Gemini (Original provider)
 ```env
 SUMMARIZER_PROVIDER=gemini
 GEMINI_API_KEY=AIza_xxxx
 ```
 Get free key: [aistudio.google.com](https://aistudio.google.com)
 
-#### 📄 Extractive (No AI)
+#### 📄 Extractive (No AI — always works)
 ```env
 SUMMARIZER_PROVIDER=extractive
 # No key needed — extracts top sentences from the article directly
 ```
 
-> **Cache:** All providers share the same `data/summary_cache.json` — summaries survive restarts and never repeat API calls for the same article.
+> **Cache:** All providers share `data/summary_cache.json` — summaries survive restarts and never repeat API calls for the same article.
+> **Auto-fallback:** If your provider is unavailable, the bot silently falls back to extractive so articles always get sent. Each message shows `🤖 AI summary` or `📄 auto-extracted`.
 
-
+---
 
 ## 🔒 Security
 
 | Area | Implementation |
 |---|---|
 | SSRF | All RSS/article URLs validated — private IPs and non-HTTP schemes blocked |
-| Prompt injection | RSS content isolated with XML delimiters in Gemini prompts |
+| Prompt injection | RSS content isolated with XML delimiters in all AI provider prompts |
 | HTML injection | All external text HTML-escaped before Telegram messages |
 | XSS | Article URLs validated to `http`/`https` only before embedding |
 | WhatsApp injection | Markdown special chars (`*`, `_`, `~`, `` ` ``) escaped in all text |
 | Error sanitization | Stack traces, API tokens, and file paths never logged |
 | File permissions | Sensitive data files written with `mode 0o600` |
 | Docker | Runs as non-root user (`botuser`) inside container |
-| Supply chain | `package-lock.json` committed; `npm audit` = **0 vulnerabilities** |
+| Supply chain | `package-lock.json` committed; `npm audit` = **0 vulnerabilities** (232 packages) |
 | CI | GitHub Actions runs `npm audit --audit-level=high` on every push |
+| Static scan | `scripts/scan.js` checks all source files for eval, prototype pollution, hardcoded keys |
 
 ---
 
@@ -445,6 +468,7 @@ SUMMARIZER_PROVIDER=extractive
 | `npm run add-source` | Add a new RSS source interactively |
 | `npm run list-groups` | List WhatsApp groups and their IDs |
 | `npm run list-telegram-chats` | List Telegram chats the bot has access to |
+| `npm run audit` | Run `npm audit` to check for vulnerabilities |
 
 ### PM2 (VPS / always-on)
 | Command | Description |
@@ -452,12 +476,15 @@ SUMMARIZER_PROVIDER=extractive
 | `npm run pm2:start` | Start with PM2 in production mode |
 | `npm run pm2:stop` | Stop |
 | `npm run pm2:restart` | Restart without downtime |
+| `npm run pm2:reload` | Zero-downtime reload |
 | `npm run pm2:logs` | Follow live logs |
 | `npm run pm2:monit` | CPU and memory monitor |
+| `npm run pm2:delete` | Remove from PM2 |
 
 ### Docker
 | Command | Description |
 |---|---|
+| `npm run docker:build` | Build the Docker image |
 | `npm run docker:up` | Build and start in background |
 | `npm run docker:down` | Stop and remove containers |
 | `npm run docker:logs` | Follow container logs |
@@ -482,13 +509,16 @@ SUMMARIZER_PROVIDER=extractive
 |---|---|
 | WhatsApp QR keeps reappearing | Delete `.wwebjs_auth/` and restart to get a fresh QR |
 | Chrome not found | Install Google Chrome, or set `CHROME_PATH=/path/to/chrome` in `.env` |
-| AI provider 429 / quota errors | Bot retries automatically. Switch provider (`SUMMARIZER_PROVIDER=groq` or `=extractive`) |
+| AI provider 429 / quota errors | Bot retries automatically. Switch provider: `SUMMARIZER_PROVIDER=groq` or `=extractive` |
+| Ollama not responding | Make sure Ollama is running: `ollama serve` — then retry |
+| HuggingFace model loading slow | Free tier cold-starts can take 20–30s — bot waits and retries automatically |
 | Telegram "chat not found" | Run `npm run list-telegram-chats` to find the correct ID |
 | Discord articles not sending | Verify `DISCORD_WEBHOOK_URL` in `.env`; regenerate webhook if needed |
 | "No platform configured" | Set at least one: `WHATSAPP_TARGET`, `TELEGRAM_BOT_TOKEN`, or `DISCORD_WEBHOOK_URL` |
 | Dashboard port in use | Change `dashboardPort` in `config.json` or set `PORT` env var |
 | Docker out of memory | Increase `memory: 600M` → `900M` in `docker-compose.yml` |
 | WhatsApp on cloud (QR scan) | See [DEPLOYMENT.md — WhatsApp on Cloud](DEPLOYMENT.md#-whatsapp-on-cloud-deployments) |
+| dotenv log at startup | Normal in v17 — suppressed automatically with `{ quiet: true }` |
 
 ---
 
