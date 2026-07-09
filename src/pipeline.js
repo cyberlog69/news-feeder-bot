@@ -147,10 +147,21 @@ class NewsPipeline {
       const allArticles = await fetchAllSources(this.sources);
       logger.info(`Fetched ${allArticles.length} articles total`);
 
-      // ── Step 2: Deduplicate ──────────────────────────────────────────────
-      let newArticles = allArticles.filter(
-        (a) => a.url && !this.deduplicator.isSeen(a.url)
-      );
+      // ── Step 2: Deduplicate (URL exact + fuzzy title similarity) ─────────
+      let newArticles = allArticles.filter((a) => {
+        if (!a.url) return false;
+        // Primary: exact URL match
+        if (this.deduplicator.isSeen(a.url)) return false;
+        // Secondary: fuzzy title match — same story from different source/URL
+        const fuzzy = this.deduplicator.isSimilarTitle(a.title);
+        if (fuzzy.isDuplicate) {
+          logger.info(
+            `Fuzzy dup (${Math.round(fuzzy.score * 100)}%): "${a.title.slice(0, 50)}…" ≈ "${fuzzy.matchedTitle?.slice(0, 50)}…"`
+          );
+          return false;
+        }
+        return true;
+      });
 
       // ── Step 3: Keyword filter ───────────────────────────────────────────
       if (this.filterCfg.enabled) {
@@ -235,9 +246,18 @@ class NewsPipeline {
               if (type === 'discord') {
                 // Use rich embeds for Discord
                 await sender.sendEmbed(article, summary, critical);
+              } else if (type === 'telegram') {
+                // Telegram: send with inline "Read Full Article" + "Share" buttons
+                const buttons = [];
+                if (article.url) {
+                  buttons.push([
+                    { text: '📖 Read Full Article', url: article.url },
+                    { text: '🔗 Share',             url: `https://t.me/share/url?url=${encodeURIComponent(article.url)}&text=${encodeURIComponent(article.title.slice(0, 100))}` }
+                  ]);
+                }
+                await sender.sendMessageWithButtons(telegramMsg, buttons);
               } else {
-                const message = type === 'telegram' ? telegramMsg : whatsappMsg;
-                await sender.sendMessage(message);
+                await sender.sendMessage(whatsappMsg);
               }
               logger.success(`[${name}] Sent: ${article.title.slice(0, 55)}…`);
               anySentOk = true;

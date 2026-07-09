@@ -171,7 +171,7 @@ async function main() {
 
   // ── Web Dashboard ─────────────────────────────────────────────────────────
   const dashPort = parseInt(config.settings?.dashboardPort, 10) || 3000;
-  startDashboard(pipeline, dashPort, BOT_START_TIME);
+  startDashboard(pipeline, dashPort, BOT_START_TIME, () => pipeline.run());
 
   // ── Initial run ───────────────────────────────────────────────────────────
   logger.info('Running initial pipeline pass...');
