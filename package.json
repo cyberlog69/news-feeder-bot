@@ -47,7 +47,7 @@
     "whatsapp-web.js": "^1.23.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "allowScripts": {
     "puppeteer@24.38.0": true

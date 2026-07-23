@@ -7,7 +7,7 @@
 
 [![CI](https://github.com/cyberlog69/news-feeder-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/cyberlog69/news-feeder-bot/actions)
 [![Security](https://img.shields.io/badge/npm%20audit-0%20vulnerabilities-brightgreen)](https://npmjs.com)
-[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-blue)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-blue)](https://nodejs.org)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](https://hub.docker.com)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -78,9 +78,10 @@
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Node.js 18+** → [nodejs.org](https://nodejs.org)
+- **Node.js 22+ (LTS)** → [nodejs.org](https://nodejs.org) *(required for built-in `node:sqlite` database & native test runner)*
+- **npm 10+** → Bundled automatically with Node.js 22+
 - **Google Chrome** → [google.com/chrome](https://google.com/chrome) *(WhatsApp only)*
-- **AI API Key** *(optional)* → Get a free [Groq key](https://console.groq.com) (default) — or use `SUMMARIZER_PROVIDER=extractive` for no AI at all
+- **AI API Key** *(optional)* → Free [Groq key](https://console.groq.com) or [Gemini key](https://aistudio.google.com) — or set `SUMMARIZER_PROVIDER=extractive` for zero-AI operation
 
 ### 3-Step Setup
 ```bash
