@@ -108,14 +108,19 @@ npm start
 
 ## 📱 Platform Setup
 
-### WhatsApp
+You can deliver news to **any combination** of the 6 supported platforms simultaneously. Set at least one in your `.env`.
+
+---
+
+### 1. 📱 WhatsApp Setup (Personal DMs & Group Chats)
 
 | Step | Action |
 |---|---|
-| 1 | Run `npm start` — a QR code appears in terminal |
-| 2 | Open WhatsApp → Linked Devices → Link a Device → scan QR |
-| 3 | Session saved to `.wwebjs_auth/` — no re-scan on future starts |
-| 4 | Find your group ID: `npm run list-groups` |
+| 1 | Set your target in `.env` (`WHATSAPP_TARGET=...`) |
+| 2 | Run `npm start` — a QR code appears in your terminal & web dashboard |
+| 3 | Open WhatsApp on your phone → **Settings** → **Linked Devices** → **Link a Device** → scan QR |
+| 4 | Session is saved automatically to `.wwebjs_auth/` — no re-scanning required on future restarts |
+| 5 | **Find Group IDs:** Run `npm run list-groups` to list all groups your account belongs to and copy their `@g.us` IDs |
 
 ```env
 # Single target (phone number, group ID, or group name)
@@ -127,13 +132,16 @@ WHATSAPP_TARGET=My Cyber News Group
 WHATSAPP_TARGET=120363409960337815@g.us,120363409960337816@g.us
 ```
 
-### Telegram
+---
+
+### 2. ✈️ Telegram Setup (Channels, Groups, & DMs)
 
 | Step | Action |
 |---|---|
-| 1 | Message `@BotFather` on Telegram → `/newbot` → copy the token |
-| 2 | Add your bot to the group/channel and make it **Admin** |
-| 3 | Find chat ID: `npm run list-telegram-chats` |
+| 1 | Message `@BotFather` on Telegram → send `/newbot` → follow prompts to get your **Bot Token** |
+| 2 | Add your bot to the Telegram Group or Channel and promote it to **Admin** |
+| 3 | Send a test message in the channel, then run `npm run list-telegram-chats` to find your Chat ID |
+| 4 | Add token and chat ID to `.env` |
 
 ```env
 TELEGRAM_BOT_TOKEN=123456789:ABCDefgh...
@@ -142,28 +150,74 @@ TELEGRAM_TARGET=-1001234567890             # private group ID
 TELEGRAM_TARGET=@channel1,-1001234567890  # multi-target
 ```
 
-### Discord
+---
+
+### 3. 🎮 Discord Setup (Server Channels)
 
 | Step | Action |
 |---|---|
-| 1 | In Discord: right-click channel → Edit Channel → Integrations → Webhooks |
-| 2 | Click **New Webhook** → copy the URL |
-| 3 | Paste into `.env` → done. No bot needed, no invite process. |
+| 1 | Open Discord → Go to your Server → Right-click target channel → **Edit Channel** |
+| 2 | Click **Integrations** → **Webhooks** → **New Webhook** |
+| 3 | Name the webhook `📰 News Feeder Bot` → click **Copy Webhook URL** |
+| 4 | Paste into `.env` — no bot token or invite process needed! |
 
 ```env
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456/xxxxx
-DISCORD_USERNAME=📰 News Feeder Bot     # optional: custom display name
-Articles appear as **rich embeds**: blue for normal, red for critical alerts.
+DISCORD_USERNAME=📰 News Feeder Bot     # optional custom display name
+DISCORD_AVATAR_URL=https://...          # optional custom avatar
+```
+*Articles appear as **rich embeds**: blue for normal news, red for critical alerts.*
 
-### Google Chat (Hangouts Space)
+---
+
+### 4. 🟢 Google Chat Space Setup (Workspace & Hangouts Spaces)
 
 | Step | Action |
 |---|---|
-| 1 | Open your Google Chat Space → click Space Name at top → **Apps & integrations** → **Webhooks** |
-| 2 | Click **Add Webhook** → Name it `📰 News Feeder Bot` → copy the URL |
-| 3 | Paste into `.env` → `GOOGLE_CHAT_WEBHOOK_URL=https://chat.googleapis.com/v1/spaces/...` |
+| 1 | Open [Google Chat](https://chat.google.com) → Navigate to your target **Chat Space** |
+| 2 | Click the Space Name dropdown at the top → Select **Apps & integrations** |
+| 3 | Click **Manage Webhooks** (or **Add Webhook**) |
+| 4 | Set Name to `📰 News Feeder Bot` → Click **Save** → **Copy Link** |
+| 5 | Paste the Webhook URL into `.env` |
 
-Articles appear as **Google Chat Cards v2** with action buttons to read full articles.
+```env
+GOOGLE_CHAT_WEBHOOK_URL=https://chat.googleapis.com/v1/spaces/AAAAxxxx/messages?key=yyyy&token=zzzz
+```
+*Articles appear as **Google Chat Cards v2** with summary text and interactive "Read Full Article 📖" action buttons.*
+
+---
+
+### 5. 💼 Slack Setup (Channels & Workspace Rooms)
+
+| Step | Action |
+|---|---|
+| 1 | Go to [api.slack.com/apps](https://api.slack.com/apps) → Click **Create New App** → **From scratch** |
+| 2 | Name it `News Feeder Bot` → select your Slack Workspace |
+| 3 | Click **Incoming Webhooks** → toggle *Activate Incoming Webhooks* to **On** |
+| 4 | Click **Add New Webhook to Workspace** → select target channel → Click **Allow** |
+| 5 | Copy the Webhook URL and paste into `.env` |
+
+```env
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T00/B00/XXXXX
+```
+*Articles appear formatted with **Slack Block Kit** headers, markdown text, and action buttons.*
+
+---
+
+### 6. 🏢 Microsoft Teams Setup (Team Channels)
+
+| Step | Action |
+|---|---|
+| 1 | Open Microsoft Teams → Go to your Team → Click **...** next to your target channel |
+| 2 | Select **Connectors** (or **Workflows** / **Integrations**) |
+| 3 | Find **Incoming Webhook** → Click **Configure** / **Add** |
+| 4 | Provide Name `News Feeder Bot` → Click **Create** → Copy the Webhook URL |
+| 5 | Paste into `.env` |
+
+```env
+TEAMS_WEBHOOK_URL=https://outlook.office.com/webhook/xxxx@yyyy/IncomingWebhook/zzzz
+```
+*Articles appear as **Microsoft Teams Adaptive Cards 1.2** with bold titles, category tags, and action buttons.*
 
 ---
 
