@@ -35,15 +35,17 @@
 
 ## 🆕 What's New
 
-### v3.1 — Multi-Provider AI & Security Hardening
+### v3.2 — Enterprise Webhooks, Native SQLite & Automated Testing
 | Change | Details |
 |---|---|
-| 🤖 **Multi-Provider AI** | Choose from Groq, Ollama, HuggingFace, OpenRouter, Gemini, or Extractive (no AI). Groq is now the default — 14,400 free req/day, no credit card |
-| 🔄 **Auto-fallback** | If the configured AI provider fails, the bot automatically falls back to extractive summarization — articles always get delivered |
-| 💾 **Shared summary cache** | All providers share `data/summary_cache.json` — switching providers doesn't waste API calls |
-| 🔐 **dotenv v17** | Updated to dotenv 17.4.2, node-cron 4.5.0, @google/generative-ai 0.24.1 — **0 vulnerabilities** across all 232 packages |
-| 🔍 **Static security scanner** | Added `scripts/scan.js` — runs pattern-based security checks across all source files |
-| ☁️ **Production deployment** | Docker, PM2, Railway, Render, Fly.io, Oracle Cloud configs — all in repo |
+| 💬 **Google Chat (Hangouts)** | Deliver news directly into Google Chat Spaces via Webhooks using rich Cards v2 |
+| 💼 **Slack & MS Teams** | Enterprise workplace delivery via Slack Block Kit and MS Teams Adaptive Cards |
+| 🗄️ **Native SQLite (`node:sqlite`)** | Crash-proof SQLite storage (`data/newsbot.sqlite`) with automatic JSON migration |
+| ⚡ **AI Fallback Cascade** | Auto-cascade through AI providers (`Groq` → `Gemini` → `OpenRouter` → `HuggingFace` → `Ollama`) |
+| 📡 **Real-Time Live UI (SSE)** | Dashboard streams live log updates instantly via Server-Sent Events (`/events`) |
+| 📊 **Prometheus Metrics** | Ingest metrics into Grafana/Datadog using standard Prometheus format (`/metrics?format=prometheus`) |
+| 🧪 **Automated Test Suite** | Native Node.js unit tests (`npm test`) covering security, scoring, formatters, and DB |
+| 🤖 **Bot Commands** | Interactive user commands (`/status`, `/search <keyword>`, `/sources`, `/help`) |
 
 ---
 
@@ -54,7 +56,10 @@
 | 📱 **WhatsApp Delivery** | Send to personal chats, groups, or channels — multi-target supported |
 | ✈️ **Telegram Delivery** | Send to channels, groups, or DMs — native Bot API, no extra libs |
 | 🎮 **Discord Delivery** | Rich embeds via webhooks — severity color-coded, zero dependencies |
-| 🤖 **Multi-Provider AI** | Choose: Groq, Ollama, HuggingFace, OpenRouter, Gemini, or Extractive — auto-fallback if API fails |
+| 🟢 **Google Chat Space** | Rich Cards v2 delivered directly into Google Chat (Hangouts) spaces |
+| 💼 **Slack & MS Teams** | Rich Block Kit and Adaptive Cards webhooks for workplace SOC rooms |
+| 🤖 **Multi-Provider AI** | Groq, Gemini, OpenRouter, HuggingFace, Ollama, or Extractive fallback |
+| 🗄️ **Native SQLite Storage** | Atomic transactions, zero JSON corruption, auto-migrated from legacy files |
 | 🎯 **Keyword Filtering** | Include or exclude articles by keywords (e.g. `ransomware`, `CVE`) |
 | 🚨 **Severity Alerts** | Auto `🚨 CRITICAL ALERT` badge for zero-days, RCE, active exploits |
 | 📋 **Daily Digest** | Bundle all articles into one daily message at a scheduled time |
@@ -63,12 +68,9 @@
 | ⚖️ **Article Scoring** | Skip low-value articles by importance score (0.0–1.0) |
 | 🔀 **Source Routing** | Send specific sources to specific platforms independently |
 | 🔁 **Multi-Target** | Comma-separated lists for WhatsApp groups and Telegram channels |
-| 📊 **Web Dashboard** | Dark-mode local UI with stats, recent articles, and live log tail |
-| 🩺 **Health Endpoints** | `/health` and `/metrics` JSON endpoints for uptime monitoring |
-| 📝 **Log Files** | Daily rotating logs in `data/logs/` with 7-day auto-retention |
-| 💚 **Health Pings** | Daily "I'm alive" message to all platforms at configured time |
-| 🐳 **Docker Ready** | Multi-stage Dockerfile + docker-compose with named volumes |
-| 🚀 **Cloud Ready** | One-click deploy to Railway, Render, Fly.io, Oracle Cloud, or any VPS |
+| 📊 **Web Dashboard & SSE** | Dark-mode local UI with stats, recent articles, and SSE live log streaming |
+| 🩺 **Health & Prometheus** | `/health` and Prometheus-compatible `/metrics` for monitoring |
+| 🧪 **Automated Testing** | `npm test` runs 16+ unit tests covering all core modules |
 | 🔒 **Security Hardened** | SSRF protection, prompt injection prevention, 0 audit vulnerabilities |
 
 ---
@@ -150,10 +152,17 @@ TELEGRAM_TARGET=@channel1,-1001234567890  # multi-target
 ```env
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456/xxxxx
 DISCORD_USERNAME=📰 News Feeder Bot     # optional: custom display name
-DISCORD_AVATAR_URL=https://...          # optional: custom avatar
-```
-
 Articles appear as **rich embeds**: blue for normal, red for critical alerts.
+
+### Google Chat (Hangouts Space)
+
+| Step | Action |
+|---|---|
+| 1 | Open your Google Chat Space → click Space Name at top → **Apps & integrations** → **Webhooks** |
+| 2 | Click **Add Webhook** → Name it `📰 News Feeder Bot` → copy the URL |
+| 3 | Paste into `.env` → `GOOGLE_CHAT_WEBHOOK_URL=https://chat.googleapis.com/v1/spaces/...` |
+
+Articles appear as **Google Chat Cards v2** with action buttons to read full articles.
 
 ---
 

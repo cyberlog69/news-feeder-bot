@@ -257,12 +257,34 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       return;
     }
 
-    // ── Metrics endpoint ─────────────────────────────────────────────────
+    // ── Metrics endpoint (JSON or Prometheus format) ─────────────────────
     if (url === '/metrics') {
-      const stats        = pipeline.getStats();
-      const recent       = pipeline.getRecentArticles(10);
-      const uptime       = Math.floor((Date.now() - startTime) / 1000);
-      const memUsage     = process.memoryUsage();
+      const stats    = pipeline.getStats();
+      const uptime   = Math.floor((Date.now() - startTime) / 1000);
+      const memUsage = process.memoryUsage();
+
+      const accept = req.headers['accept'] || '';
+      const isPrometheus = req.url.includes('format=prometheus') || accept.includes('text/plain');
+
+      if (isPrometheus) {
+        const prometheusOutput = [
+          '# HELP newsbot_uptime_seconds Total bot uptime in seconds',
+          '# TYPE newsbot_uptime_seconds counter',
+          `newsbot_uptime_seconds ${uptime}`,
+          '# HELP newsbot_articles_sent_total Total articles sent all-time',
+          '# TYPE newsbot_articles_sent_total counter',
+          `newsbot_articles_sent_total ${stats.totalSent}`,
+          '# HELP newsbot_memory_heap_bytes Memory heap used in bytes',
+          '# TYPE newsbot_memory_heap_bytes gauge',
+          `newsbot_memory_heap_bytes ${memUsage.heapUsed}`
+        ].join('\n');
+
+        res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4' });
+        res.end(prometheusOutput);
+        return;
+      }
+
+      const recent = pipeline.getRecentArticles(10);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status:          'ok',
@@ -278,6 +300,26 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
         environment:  process.env.NODE_ENV || 'development',
         timestamp:    new Date().toISOString()
       }, null, 2));
+      return;
+    }
+
+    // ── Server-Sent Events (/events) for live log streaming ─────────────
+    if (url === '/events') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      });
+
+      const sendLogUpdate = () => {
+        const lines = getLatestLog(20);
+        res.write(`data: ${JSON.stringify({ logs: lines })}\n\n`);
+      };
+
+      sendLogUpdate();
+      const intervalHandle = setInterval(sendLogUpdate, 3000);
+
+      req.on('close', () => clearInterval(intervalHandle));
       return;
     }
 

@@ -104,7 +104,6 @@ class WhatsAppSender {
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--single-process',              // more stable in constrained environments
           '--disable-gpu',
           '--disable-extensions',
           '--disable-background-networking',

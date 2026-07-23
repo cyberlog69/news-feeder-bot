@@ -246,6 +246,15 @@ class NewsPipeline {
               if (type === 'discord') {
                 // Use rich embeds for Discord
                 await sender.sendEmbed(article, summary, critical);
+              } else if (type === 'google-chat') {
+                // Use Card v2 for Google Chat
+                await sender.sendCard(article, summary, critical);
+              } else if (type === 'slack') {
+                // Use Block Kit for Slack
+                await sender.sendBlockKit(article, summary, critical);
+              } else if (type === 'teams') {
+                // Use Adaptive Cards for MS Teams
+                await sender.sendAdaptiveCard(article, summary, critical);
               } else if (type === 'telegram') {
                 // Telegram: send with inline "Read Full Article" + "Share" buttons
                 const buttons = [];

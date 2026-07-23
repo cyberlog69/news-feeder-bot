@@ -23,6 +23,7 @@
     "add-source": "node add-source.js",
     "list-groups": "node list-groups.js",
     "list-telegram-chats": "node list-telegram-chats.js",
+    "test": "node --test test/*.test.js",
     "audit": "npm audit",
     "audit:fix": "npm audit fix"
   },

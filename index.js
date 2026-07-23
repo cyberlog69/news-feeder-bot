@@ -15,10 +15,13 @@ require('dotenv').config({ quiet: true }); // quiet:true suppresses dotenv v17 r
 const path            = require('path');
 const fs              = require('fs');
 const cron            = require('node-cron');
-const WhatsAppSender  = require('./src/sender');
-const TelegramSender  = require('./src/telegram-sender');
-const DiscordSender   = require('./src/discord-sender');
-const NewsPipeline    = require('./src/pipeline');
+const WhatsAppSender   = require('./src/sender');
+const TelegramSender   = require('./src/telegram-sender');
+const DiscordSender    = require('./src/discord-sender');
+const SlackSender      = require('./src/slack-sender');
+const TeamsSender      = require('./src/teams-sender');
+const GoogleChatSender = require('./src/google-chat-sender');
+const NewsPipeline     = require('./src/pipeline');
 const { initSummarizer } = require('./src/summarizer');
 const {
   formatStartupMessage,
@@ -29,6 +32,7 @@ const {
   formatDigestForTelegram
 } = require('./src/formatter');
 const { startDashboard } = require('./src/web-dashboard');
+const { validateEnv }    = require('./src/env-validator');
 const logger          = require('./src/logger');
 
 const BOT_START_TIME = Date.now();
@@ -41,6 +45,8 @@ console.log('║   Cybersecurity & Tech News — Multi-Platform     ║');
 console.log('╚══════════════════════════════════════════════════╝\n');
 
 // ── Environment ───────────────────────────────────────────────────────────────
+validateEnv();
+
 const WA_TARGETS_RAW  = process.env.WHATSAPP_TARGET  || '';
 const TG_TOKEN        = process.env.TELEGRAM_BOT_TOKEN;
 const TG_TARGETS_RAW  = process.env.TELEGRAM_TARGET  || '';
@@ -147,18 +153,28 @@ async function main() {
     logger.info('Telegram: not configured — skipping');
   }
 
-  // ── Discord (optional) ────────────────────────────────────────────────────
-  if (DISCORD_WEBHOOK) {
-    logger.info('Initializing Discord webhook...');
+  // ── Slack (optional) ──────────────────────────────────────────────────────
+  const SLACK_WEBHOOK = process.env.SLACK_WEBHOOK_URL;
+  if (SLACK_WEBHOOK) {
     try {
-      const discordSender = new DiscordSender(DISCORD_WEBHOOK, DISCORD_NAME, DISCORD_AVATAR);
-      await discordSender.initialize();
-      senders.push({ name: 'Discord', sender: discordSender, type: 'discord' });
+      const slackSender = new SlackSender(SLACK_WEBHOOK);
+      await slackSender.initialize();
+      senders.push({ name: 'Slack', sender: slackSender, type: 'slack' });
     } catch (err) {
-      logger.error(`Discord init failed: ${err.message.split('\n')[0]}`);
+      logger.error(`Slack init failed: ${err.message.split('\n')[0]}`);
     }
-  } else {
-    logger.info('Discord: not configured (DISCORD_WEBHOOK_URL not set) — skipping');
+  }
+
+  // ── Google Chat Space (optional) ──────────────────────────────────────────
+  const GOOGLE_CHAT_WEBHOOK = process.env.GOOGLE_CHAT_WEBHOOK_URL;
+  if (GOOGLE_CHAT_WEBHOOK) {
+    try {
+      const googleChatSender = new GoogleChatSender(GOOGLE_CHAT_WEBHOOK);
+      await googleChatSender.initialize();
+      senders.push({ name: 'Google Chat', sender: googleChatSender, type: 'google-chat' });
+    } catch (err) {
+      logger.error(`Google Chat init failed: ${err.message.split('\n')[0]}`);
+    }
   }
 
   if (senders.length === 0) {
