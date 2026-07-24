@@ -54,13 +54,17 @@ function handleCommand(text, config, startTime) {
     case '/search': {
       if (!args) return '⚠️ Usage: `/search <keyword>` (e.g. `/search ransomware`)';
 
-      const results = searchSeenArticles(args, 5);
+      // Security: cap keyword length and strip control/non-printable characters
+      const keyword = args.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 100).trim();
+      if (!keyword) return '⚠️ Invalid search keyword.';
+
+      const results = searchSeenArticles(keyword, 5);
       if (results.length === 0) {
-        return `🔍 No recent articles found matching: *${args}*`;
+        return `🔍 No recent articles found matching: *${keyword}*`;
       }
 
       return [
-        `🔍 *Search Results for "${args}"*`,
+        `🔍 *Search Results for "${keyword}"*`,
         '━━━━━━━━━━━━━━━━━━━━━━━━━',
         ...results.map((r, i) => `${i + 1}. *${r.title}*\n   _${r.source}_ • [Link](${r.url})\n`),
         '━━━━━━━━━━━━━━━━━━━━━━━━━'

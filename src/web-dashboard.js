@@ -242,11 +242,21 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
   const server = http.createServer(async (req, res) => {
     const url = req.url.split('?')[0];
 
+    // ── Security headers helper ──────────────────────────────────────────
+    function secureHeaders(extra = {}) {
+      return {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'no-referrer',
+        ...extra
+      };
+    }
+
     // ── Health check endpoint (used by cloud platforms) ──────────────────
     if (url === '/health') {
       const stats  = pipeline.getStats();
       const uptime = Math.floor((Date.now() - startTime) / 1000);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
       res.end(JSON.stringify({
         status:      'ok',
         uptime_sec:  uptime,
@@ -305,10 +315,22 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
 
     // ── Server-Sent Events (/events) for live log streaming ─────────────
     if (url === '/events') {
+      // Security: require token auth on /events if DASHBOARD_TOKEN is set
+      if (DASHBOARD_TOKEN) {
+        const authHeader = req.headers['authorization'] || '';
+        const provided   = authHeader.replace(/^Bearer\s+/i, '').trim();
+        if (provided !== DASHBOARD_TOKEN) {
+          res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ error: 'Unauthorized' }));
+          return;
+        }
+      }
+
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        ...secureHeaders()
       });
 
       const sendLogUpdate = () => {
@@ -326,9 +348,12 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
     // ── /api/articles — machine-readable article history ─────────────────
     if (url === '/api/articles') {
       const recent = pipeline.getRecentArticles(50);
+      // Security: restrict CORS to localhost in dev, omit wildcard in production
+      const corsOrigin = IS_PROD ? null : 'http://localhost';
+      const corsHeaders = corsOrigin ? { 'Access-Control-Allow-Origin': corsOrigin } : {};
       res.writeHead(200, {
-        'Content-Type':                'application/json',
-        'Access-Control-Allow-Origin': '*'
+        'Content-Type': 'application/json',
+        ...secureHeaders(corsHeaders)
       });
       res.end(JSON.stringify({ count: recent.length, articles: recent }, null, 2));
       return;
@@ -382,10 +407,16 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
         const recentArticles = pipeline.getRecentArticles(20);
         const logLines       = getLatestLog(80);
         const html           = buildHtml(stats, recentArticles, logLines, startTime);
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          ...secureHeaders({
+            'Content-Security-Policy': "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
+          })
+        });
         res.end(html);
       } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.writeHead(500, { 'Content-Type': 'text/plain', ...secureHeaders() });
         res.end('Dashboard error: ' + err.message);
       }
       return;

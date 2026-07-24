@@ -187,7 +187,7 @@ async function callOllama(title, content, bullets) {
 }
 
 // ── Hugging Face Inference API ────────────────────────────────────────────────
-async function callHuggingFace(content, bullets) {
+async function callHuggingFace(content, bullets, retryCount = 0) {
   const apiKey = process.env.HF_API_KEY;
   if (!apiKey) throw new Error('HF_API_KEY not set');
 
@@ -208,13 +208,17 @@ async function callHuggingFace(content, bullets) {
     })
   }, 30000);
 
-  // Model loading on HF free tier — wait and retry
-  if (res.status === 503) {
+  // Model loading on HF free tier — wait and retry (max 1 retry)
+  if (res.status === 503 && retryCount < 1) {
     const data = await res.json().catch(() => ({}));
     const wait = (data.estimated_time || 20) + 2;
     logger.warn(`HuggingFace model loading — waiting ${Math.round(wait)}s...`);
     await sleep(wait * 1000);
-    return callHuggingFace(content, bullets);  // one retry
+    return callHuggingFace(content, bullets, retryCount + 1);  // one retry only
+  }
+
+  if (res.status === 503) {
+    throw new Error('HuggingFace model still loading after retry — skipping');
   }
 
   if (!res.ok) {
