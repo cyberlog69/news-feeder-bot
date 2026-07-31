@@ -54,7 +54,59 @@ class TeamsSender {
     }
   }
 
-  async sendAdaptiveCard(article, summary, isCritical = false) {
+  async sendAdaptiveCard(article, summary, isCritical = false, threatIntel = null) {
+    const cardBody = [
+      {
+        type: 'TextBlock',
+        text: `${isCritical ? '🚨 CRITICAL: ' : ''}${article.title}`,
+        weight: 'Bolder',
+        size: 'Medium',
+        wrap: true,
+        color: isCritical ? 'Attention' : 'Default'
+      },
+      {
+        type: 'TextBlock',
+        text: `Source: ${article.source} | Category: ${article.category}`,
+        isSubtle: true,
+        size: 'Small',
+        wrap: true
+      },
+      {
+        type: 'TextBlock',
+        text: summary,
+        wrap: true
+      }
+    ];
+
+    if (threatIntel) {
+      const facts = [];
+      if (threatIntel.cves && threatIntel.cves.length > 0) {
+        facts.push({
+          title: 'CVEs:',
+          value: threatIntel.cves.map((c) => `${c.cveId}${c.cvss ? ' (CVSS ' + c.cvss + ')' : ''}`).join(', ')
+        });
+      }
+      if (threatIntel.mitre && threatIntel.mitre.length > 0) {
+        facts.push({
+          title: 'MITRE:',
+          value: threatIntel.mitre.map((m) => `${m.id} (${m.name})`).join(', ')
+        });
+      }
+      if (threatIntel.iocs && (threatIntel.iocs.ips.length || threatIntel.iocs.hashes.length)) {
+        const iocStr = [];
+        if (threatIntel.iocs.ips.length) iocStr.push(`IPs: ${threatIntel.iocs.ips.join(', ')}`);
+        if (threatIntel.iocs.hashes.length) iocStr.push(`Hashes: ${threatIntel.iocs.hashes.map((h) => h.slice(0, 10) + '…').join(', ')}`);
+        facts.push({ title: 'IOCs:', value: iocStr.join(' | ') });
+      }
+
+      if (facts.length > 0) {
+        cardBody.push({
+          type: 'FactSet',
+          facts
+        });
+      }
+    }
+
     const payload = {
       type: 'message',
       attachments: [
@@ -64,28 +116,7 @@ class TeamsSender {
             $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
             type: 'AdaptiveCard',
             version: '1.2',
-            body: [
-              {
-                type: 'TextBlock',
-                text: `${isCritical ? '🚨 CRITICAL: ' : ''}${article.title}`,
-                weight: 'Bolder',
-                size: 'Medium',
-                wrap: true,
-                color: isCritical ? 'Attention' : 'Default'
-              },
-              {
-                type: 'TextBlock',
-                text: `Source: ${article.source} | Category: ${article.category}`,
-                isSubtle: true,
-                size: 'Small',
-                wrap: true
-              },
-              {
-                type: 'TextBlock',
-                text: summary,
-                wrap: true
-              }
-            ],
+            body: cardBody,
             actions: [
               {
                 type: 'Action.OpenUrl',

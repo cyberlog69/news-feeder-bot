@@ -53,10 +53,58 @@ class GoogleChatSender {
    * @param {object} article - { title, url, source, category }
    * @param {string} summary
    * @param {boolean} isCritical
+   * @param {object} [threatIntel]
    */
-  async sendCard(article, summary, isCritical = false) {
+  async sendCard(article, summary, isCritical = false, threatIntel = null) {
     const headerTitle = `${isCritical ? '🚨 CRITICAL ALERT: ' : ''}${article.title.slice(0, 150)}`;
     const subtitle = `${article.source || 'News'} • ${article.category || 'Tech'}`;
+
+    const widgets = [
+      {
+        textParagraph: {
+          text: summary
+        }
+      }
+    ];
+
+    if (threatIntel) {
+      const tiLines = ['<b>🛡️ Threat Intelligence</b>'];
+      if (threatIntel.cves && threatIntel.cves.length > 0) {
+        tiLines.push(`• <b>CVEs:</b> ` + threatIntel.cves.map((c) => `${c.cveId}${c.cvss ? ' (CVSS ' + c.cvss + ')' : ''}`).join(', '));
+      }
+      if (threatIntel.mitre && threatIntel.mitre.length > 0) {
+        tiLines.push(`• <b>MITRE:</b> ` + threatIntel.mitre.map((m) => `${m.id} (${m.name})`).join(', '));
+      }
+      if (threatIntel.iocs && (threatIntel.iocs.ips.length || threatIntel.iocs.hashes.length)) {
+        const iocParts = [];
+        if (threatIntel.iocs.ips.length) iocParts.push(`IPs: ${threatIntel.iocs.ips.join(', ')}`);
+        if (threatIntel.iocs.hashes.length) iocParts.push(`Hashes: ${threatIntel.iocs.hashes.map((h) => h.slice(0, 10) + '…').join(', ')}`);
+        tiLines.push(`• <b>IOCs:</b> ${iocParts.join(' | ')}`);
+      }
+
+      if (tiLines.length > 1) {
+        widgets.push({
+          textParagraph: {
+            text: tiLines.join('\n')
+          }
+        });
+      }
+    }
+
+    widgets.push({
+      buttonList: {
+        buttons: [
+          {
+            text: 'Read Full Article 📖',
+            onClick: {
+              openLink: {
+                url: article.url
+              }
+            }
+          }
+        ]
+      }
+    });
 
     const cardPayload = {
       cardsV2: [
@@ -71,27 +119,7 @@ class GoogleChatSender {
             },
             sections: [
               {
-                widgets: [
-                  {
-                    textParagraph: {
-                      text: summary
-                    }
-                  },
-                  {
-                    buttonList: {
-                      buttons: [
-                        {
-                          text: 'Read Full Article 📖',
-                          onClick: {
-                            openLink: {
-                              url: article.url
-                            }
-                          }
-                        }
-                      ]
-                    }
-                  }
-                ]
+                widgets: widgets
               }
             ]
           }

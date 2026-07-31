@@ -64,7 +64,39 @@ function isCritical(title, severityKeywords = []) {
  * @param {boolean}  aiUsed            — true if Gemini was used, false if fallback
  * @param {string[]} [severityKeywords] — from config.severity.keywords
  */
-function formatArticle(article, summary, aiUsed = true, severityKeywords = []) {
+function formatThreatIntelWA(threatIntel) {
+  if (!threatIntel) return '';
+  const lines = ['🛡️ *Threat Intelligence*'];
+
+  if (threatIntel.cves && threatIntel.cves.length > 0) {
+    const cveStr = threatIntel.cves.map((c) => {
+      let info = c.cveId;
+      if (c.cvss) info += ` (CVSS ${c.cvss}${c.severity ? ' ' + c.severity : ''})`;
+      if (c.epss) info += ` [EPSS ${Math.round(c.epss * 100)}%]`;
+      return info;
+    }).join(', ');
+    lines.push(`• *CVEs:* ${cveStr}`);
+  }
+
+  if (threatIntel.mitre && threatIntel.mitre.length > 0) {
+    const mitreStr = threatIntel.mitre.map((m) => `${m.id} (${m.name})`).join(', ');
+    lines.push(`• *MITRE ATT&CK:* ${mitreStr}`);
+  }
+
+  if (threatIntel.iocs) {
+    const iocParts = [];
+    if (threatIntel.iocs.ips.length > 0) iocParts.push(`IPs: ${threatIntel.iocs.ips.join(', ')}`);
+    if (threatIntel.iocs.hashes.length > 0) iocParts.push(`Hashes: ${threatIntel.iocs.hashes.map((h) => h.slice(0, 10) + '…').join(', ')}`);
+    if (threatIntel.iocs.domains.length > 0) iocParts.push(`Domains: ${threatIntel.iocs.domains.join(', ')}`);
+    if (iocParts.length > 0) {
+      lines.push(`• *IOCs:* ${iocParts.join(' | ')}`);
+    }
+  }
+
+  return lines.length > 1 ? lines.join('\n') : '';
+}
+
+function formatArticle(article, summary, aiUsed = true, severityKeywords = [], threatIntel = null) {
   const timeStr  = formatDate(article.publishedAt);
   const divider  = '━━━━━━━━━━━━━━━━━━━━━━━━━';
   const critical = isCritical(article.title, severityKeywords);
@@ -74,6 +106,7 @@ function formatArticle(article, summary, aiUsed = true, severityKeywords = []) {
   const category = escWA(article.category);
   const url      = safeUrl(article.url);
   const aiLabel  = aiUsed ? '_🤖 AI summary_' : '_📄 auto-extracted_';
+  const tiBlock  = formatThreatIntelWA(threatIntel);
 
   const lines = [];
 
@@ -87,7 +120,14 @@ function formatArticle(article, summary, aiUsed = true, severityKeywords = []) {
     divider,
     `*${title}*`,
     '',
-    summary,
+    summary
+  );
+
+  if (tiBlock) {
+    lines.push('', tiBlock);
+  }
+
+  lines.push(
     '',
     `🔗 ${url}`,
     `⏰ _${timeStr}_  ${aiLabel}`,
@@ -171,7 +211,39 @@ function formatDigest(articles, summaries, date) {
  * @param {boolean}  aiUsed
  * @param {string[]} [severityKeywords]
  */
-function formatArticleForTelegram(article, summary, aiUsed = true, severityKeywords = []) {
+function formatThreatIntelTelegram(threatIntel) {
+  if (!threatIntel) return '';
+  const lines = ['🛡️ <b>Threat Intelligence</b>'];
+
+  if (threatIntel.cves && threatIntel.cves.length > 0) {
+    const cveStr = threatIntel.cves.map((c) => {
+      let info = esc(c.cveId);
+      if (c.cvss) info += ` (CVSS ${c.cvss}${c.severity ? ' ' + esc(c.severity) : ''})`;
+      if (c.epss) info += ` [EPSS ${Math.round(c.epss * 100)}%]`;
+      return info;
+    }).join(', ');
+    lines.push(`• <b>CVEs:</b> ${cveStr}`);
+  }
+
+  if (threatIntel.mitre && threatIntel.mitre.length > 0) {
+    const mitreStr = threatIntel.mitre.map((m) => `${esc(m.id)} (${esc(m.name)})`).join(', ');
+    lines.push(`• <b>MITRE ATT&CK:</b> ${mitreStr}`);
+  }
+
+  if (threatIntel.iocs) {
+    const iocParts = [];
+    if (threatIntel.iocs.ips.length > 0) iocParts.push(`IPs: ${esc(threatIntel.iocs.ips.join(', '))}`);
+    if (threatIntel.iocs.hashes.length > 0) iocParts.push(`Hashes: ${esc(threatIntel.iocs.hashes.map((h) => h.slice(0, 10) + '…').join(', '))}`);
+    if (threatIntel.iocs.domains.length > 0) iocParts.push(`Domains: ${esc(threatIntel.iocs.domains.join(', '))}`);
+    if (iocParts.length > 0) {
+      lines.push(`• <b>IOCs:</b> ${iocParts.join(' | ')}`);
+    }
+  }
+
+  return lines.length > 1 ? lines.join('\n') : '';
+}
+
+function formatArticleForTelegram(article, summary, aiUsed = true, severityKeywords = [], threatIntel = null) {
   const timeStr  = formatDate(article.publishedAt);
   const divider  = '━━━━━━━━━━━━━━━━━━━━━━━━━';
   const critical = isCritical(article.title, severityKeywords);
@@ -181,6 +253,7 @@ function formatArticleForTelegram(article, summary, aiUsed = true, severityKeywo
   const category = esc(article.category);
   const url      = safeUrl(article.url);
   const aiLabel  = aiUsed ? '🤖 <i>AI summary</i>' : '📄 <i>auto-extracted</i>';
+  const tiBlock  = formatThreatIntelTelegram(threatIntel);
 
   const telegramSummary = summary
     .split('\n')
@@ -199,7 +272,14 @@ function formatArticleForTelegram(article, summary, aiUsed = true, severityKeywo
     divider,
     `<b>${title}</b>`,
     '',
-    telegramSummary,
+    telegramSummary
+  );
+
+  if (tiBlock) {
+    lines.push('', tiBlock);
+  }
+
+  lines.push(
     '',
     `🔗 <a href="${esc(url)}">Read full article</a>`,
     `⏰ <i>${esc(timeStr)}</i>  ${aiLabel}`,

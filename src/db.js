@@ -40,6 +40,15 @@ function initDb() {
         summary TEXT,
         created_at TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS threat_intel_cache (
+        cve_id TEXT PRIMARY KEY,
+        cvss REAL,
+        severity TEXT,
+        epss REAL,
+        percentile REAL,
+        updated_at TEXT
+      );
     `);
 
     // Migrate legacy JSON files if they exist
@@ -183,6 +192,25 @@ function setCachedSummary(url, summary) {
   stmt.run(url, summary, new Date().toISOString());
 }
 
+// ── Threat Intel Cache API ────────────────────────────────────────────────────
+
+function getCveCache(cveId) {
+  if (!cveId) return null;
+  const database = initDb();
+  const stmt = database.prepare('SELECT cve_id as cveId, cvss, severity, epss, percentile FROM threat_intel_cache WHERE cve_id = ? LIMIT 1');
+  return stmt.get(cveId) || null;
+}
+
+function setCveCache(cveId, data) {
+  if (!cveId || !data) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO threat_intel_cache (cve_id, cvss, severity, epss, percentile, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(cveId, data.cvss || null, data.severity || null, data.epss || null, data.percentile || null, new Date().toISOString());
+}
+
 module.exports = {
   initDb,
   isUrlSeen,
@@ -191,5 +219,7 @@ module.exports = {
   searchSeenArticles,
   getTotalSeenCount,
   getCachedSummary,
-  setCachedSummary
+  setCachedSummary,
+  getCveCache,
+  setCveCache
 };

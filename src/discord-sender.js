@@ -118,19 +118,50 @@ class DiscordSender {
    * @param {object} article  — { title, url, source, category, publishedAt }
    * @param {string} summary
    * @param {boolean} isCritical
+   * @param {object} [threatIntel]
    */
-  async sendEmbed(article, summary, isCritical = false) {
+  async sendEmbed(article, summary, isCritical = false, threatIntel = null) {
     const bulletText = summary
       .split('\n')
       .filter((l) => l.trim())
       .map((l) => l.replace(/^[•▪\-*]\s*/, ''))
       .join('\n');
 
+    const fields = [];
+
+    if (threatIntel) {
+      if (threatIntel.cves && threatIntel.cves.length > 0) {
+        const cveVal = threatIntel.cves.map((c) => {
+          let str = `**${c.cveId}**`;
+          if (c.cvss) str += ` (CVSS ${c.cvss}${c.severity ? ' ' + c.severity : ''})`;
+          if (c.epss) str += ` [EPSS ${Math.round(c.epss * 100)}%]`;
+          return str;
+        }).join('\n');
+        fields.push({ name: '🛡️ CVEs & Severity', value: cveVal.slice(0, 1024), inline: false });
+      }
+
+      if (threatIntel.mitre && threatIntel.mitre.length > 0) {
+        const mitreVal = threatIntel.mitre.map((m) => `\`${m.id}\` ${m.name}`).join('\n');
+        fields.push({ name: '🎯 MITRE ATT&CK', value: mitreVal.slice(0, 1024), inline: true });
+      }
+
+      if (threatIntel.iocs) {
+        const iocLines = [];
+        if (threatIntel.iocs.ips.length > 0) iocLines.push(`**IPs:** ${threatIntel.iocs.ips.join(', ')}`);
+        if (threatIntel.iocs.hashes.length > 0) iocLines.push(`**Hashes:** ${threatIntel.iocs.hashes.map((h) => h.slice(0, 10) + '…').join(', ')}`);
+        if (threatIntel.iocs.domains.length > 0) iocLines.push(`**Domains:** ${threatIntel.iocs.domains.join(', ')}`);
+        if (iocLines.length > 0) {
+          fields.push({ name: '🔍 Indicators of Compromise', value: iocLines.join('\n').slice(0, 1024), inline: false });
+        }
+      }
+    }
+
     const embed = {
       title:       article.title.slice(0, 256),
       url:         article.url,
       description: bulletText.slice(0, 4096),
       color:       isCritical ? 0xFF0000 : 0x00AAFF,  // red for critical, blue otherwise
+      fields:      fields.length > 0 ? fields : undefined,
       footer: {
         text: `${article.source} • ${article.category}`
       },

@@ -21,6 +21,7 @@ const { fetchAllSources, getFullArticleText }         = require('./fetcher');
 const { summarizeArticle }                            = require('./summarizer');
 const { formatArticle, formatArticleForTelegram, isCritical } = require('./formatter');
 const { scoreArticle, passesScoreThreshold }          = require('./scorer');
+const { enrichArticle }                               = require('./threat-intel');
 const Deduplicator                                    = require('./deduplicator');
 const logger                                          = require('./logger');
 
@@ -216,6 +217,15 @@ class NewsPipeline {
             article.title, content, this.bulletPoints, article.url
           );
 
+          // 6b. Threat Intelligence & Security Enrichment
+          const threatIntel = await enrichArticle(article, content).catch((err) => {
+            logger.warn(`Threat intel enrichment failed: ${err.message}`);
+            return null;
+          });
+          if (threatIntel) {
+            logger.info(`🛡️ Threat Intel enriched: ${threatIntel.cves.length} CVEs, ${threatIntel.mitre.length} MITRE, ${threatIntel.iocs.ips.length + threatIntel.iocs.hashes.length} IOCs`);
+          }
+
           // Check severity
           const severityKeywords = this.severityCfg.enabled
             ? (this.severityCfg.keywords || [])
@@ -225,7 +235,7 @@ class NewsPipeline {
 
           // If digest mode is on, buffer and skip per-article broadcast
           if (this.digestCfg.enabled) {
-            digestBuffer.push({ article, summary, aiUsed });
+            digestBuffer.push({ article, summary, aiUsed, threatIntel });
             this.deduplicator.markSeen(article.url, article.title, article.source);
             sentCount++;
             logger.info(`Buffered for digest: ${article.title.slice(0, 55)}…`);
@@ -234,8 +244,8 @@ class NewsPipeline {
           }
 
           // 7. Format for each platform
-          const whatsappMsg = formatArticle(article, summary, aiUsed, severityKeywords);
-          const telegramMsg = formatArticleForTelegram(article, summary, aiUsed, severityKeywords);
+          const whatsappMsg = formatArticle(article, summary, aiUsed, severityKeywords, threatIntel);
+          const telegramMsg = formatArticleForTelegram(article, summary, aiUsed, severityKeywords, threatIntel);
 
           // 8. Broadcast to routed platforms
           const targetSenders = this._getSendersForArticle(article);
@@ -245,16 +255,16 @@ class NewsPipeline {
             try {
               if (type === 'discord') {
                 // Use rich embeds for Discord
-                await sender.sendEmbed(article, summary, critical);
+                await sender.sendEmbed(article, summary, critical, threatIntel);
               } else if (type === 'google-chat') {
                 // Use Card v2 for Google Chat
-                await sender.sendCard(article, summary, critical);
+                await sender.sendCard(article, summary, critical, threatIntel);
               } else if (type === 'slack') {
                 // Use Block Kit for Slack
-                await sender.sendBlockKit(article, summary, critical);
+                await sender.sendBlockKit(article, summary, critical, threatIntel);
               } else if (type === 'teams') {
                 // Use Adaptive Cards for MS Teams
-                await sender.sendAdaptiveCard(article, summary, critical);
+                await sender.sendAdaptiveCard(article, summary, critical, threatIntel);
               } else if (type === 'telegram') {
                 // Telegram: send with inline "Read Full Article" + "Share" buttons
                 const buttons = [];
