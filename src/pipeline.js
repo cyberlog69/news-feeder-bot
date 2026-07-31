@@ -300,6 +300,27 @@ class NewsPipeline {
               } else if (type === 'teams') {
                 // Use Adaptive Cards for MS Teams
                 await sender.sendAdaptiveCard(currentArticle, currentSummary, critical, currentIntel);
+              } else if (type === 'email') {
+                // Send HTML email newsletter
+                if (typeof sender.sendEmail === 'function') {
+                  await sender.sendEmail(currentArticle, currentSummary, currentIntel);
+                } else {
+                  await sender.sendMessage(currentSummary);
+                }
+              } else if (type === 'push') {
+                // Send mobile push notification
+                if (typeof sender.sendPush === 'function') {
+                  await sender.sendPush(currentArticle.title, currentSummary, currentArticle.url, critical);
+                } else {
+                  await sender.sendMessage(currentSummary);
+                }
+              } else if (type === 'outbound-webhook') {
+                // Export structured JSON threat payload
+                if (typeof sender.sendPayload === 'function') {
+                  await sender.sendPayload(currentArticle, currentSummary, critical, currentIntel);
+                } else {
+                  await sender.sendMessage(currentSummary);
+                }
               } else if (type === 'telegram') {
                 // Telegram: send with inline "Read Full Article" + "Share" buttons
                 const localizedTgMsg = formatArticleForTelegram(currentArticle, currentSummary, aiUsed, severityKeywords, currentIntel);

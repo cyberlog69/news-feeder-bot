@@ -15,11 +15,14 @@ function validateEnv() {
   const discordWebhook = (process.env.DISCORD_WEBHOOK_URL || '').trim();
   const slackWebhook = (process.env.SLACK_WEBHOOK_URL || '').trim();
   const teamsWebhook = (process.env.TEAMS_WEBHOOK_URL || '').trim();
-  const googleChatWebhook = (process.env.GOOGLE_CHAT_WEBHOOK_URL || '').trim();
+  const emailTo = (process.env.EMAIL_TO || '').trim();
+  const ntfyTopic = (process.env.NTFY_TOPIC_URL || '').trim();
+  const pushoverUser = (process.env.PUSHOVER_USER_KEY || '').trim();
+  const outboundWebhook = (process.env.OUTBOUND_WEBHOOK_URL || '').trim();
 
   // 1. Must have at least one delivery platform
-  if (!waTarget && !tgToken && !discordWebhook && !slackWebhook && !teamsWebhook && !googleChatWebhook) {
-    issues.push('No delivery platform configured! Set WHATSAPP_TARGET, TELEGRAM_BOT_TOKEN, DISCORD_WEBHOOK_URL, SLACK_WEBHOOK_URL, TEAMS_WEBHOOK_URL, or GOOGLE_CHAT_WEBHOOK_URL.');
+  if (!waTarget && !tgToken && !discordWebhook && !slackWebhook && !teamsWebhook && !googleChatWebhook && !emailTo && !ntfyTopic && !pushoverUser && !outboundWebhook) {
+    issues.push('No delivery platform configured! Set WHATSAPP_TARGET, TELEGRAM_BOT_TOKEN, DISCORD_WEBHOOK_URL, SLACK_WEBHOOK_URL, TEAMS_WEBHOOK_URL, GOOGLE_CHAT_WEBHOOK_URL, EMAIL_TO, NTFY_TOPIC_URL, PUSHOVER_USER_KEY, or OUTBOUND_WEBHOOK_URL.');
   }
 
   // 2. Validate Webhook URLs if provided
@@ -27,7 +30,8 @@ function validateEnv() {
     { name: 'DISCORD_WEBHOOK_URL', url: discordWebhook },
     { name: 'SLACK_WEBHOOK_URL', url: slackWebhook },
     { name: 'TEAMS_WEBHOOK_URL', url: teamsWebhook },
-    { name: 'GOOGLE_CHAT_WEBHOOK_URL', url: googleChatWebhook }
+    { name: 'GOOGLE_CHAT_WEBHOOK_URL', url: googleChatWebhook },
+    { name: 'OUTBOUND_WEBHOOK_URL', url: outboundWebhook }
   ].forEach(({ name, url }) => {
     if (url) {
       try {
