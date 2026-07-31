@@ -57,6 +57,16 @@ function initDb() {
         created_at TEXT,
         PRIMARY KEY (text_hash, target_lang)
       );
+
+      CREATE TABLE IF NOT EXISTS article_vectors (
+        url TEXT PRIMARY KEY,
+        title TEXT,
+        summary TEXT,
+        source TEXT,
+        published_at TEXT,
+        vector_json TEXT,
+        created_at TEXT
+      );
     `);
 
     // Migrate legacy JSON files if they exist
@@ -247,6 +257,29 @@ function setCachedTranslation(text, targetLang, translation) {
   stmt.run(h, String(targetLang).toLowerCase().trim(), translation, new Date().toISOString());
 }
 
+// ── Vector RAG Storage API ───────────────────────────────────────────────────
+
+function saveArticleVector(url, title, summary, source, publishedAt, vectorJson) {
+  if (!url || !title) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO article_vectors (url, title, summary, source, published_at, vector_json, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(url, title, summary || '', source || '', publishedAt || new Date().toISOString(), vectorJson || '{}', new Date().toISOString());
+}
+
+function getAllArticleVectors(limit = 100) {
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT url, title, summary, source, published_at as publishedAt, vector_json as vectorJson
+    FROM article_vectors
+    ORDER BY created_at DESC
+    LIMIT ?
+  `);
+  return stmt.all(limit);
+}
+
 module.exports = {
   initDb,
   isUrlSeen,
@@ -259,5 +292,7 @@ module.exports = {
   getCveCache,
   setCveCache,
   getCachedTranslation,
-  setCachedTranslation
+  setCachedTranslation,
+  saveArticleVector,
+  getAllArticleVectors
 };

@@ -25,6 +25,7 @@ const { enrichArticle }                               = require('./threat-intel'
 const { translateArticleData }                        = require('./translator');
 const { generateAudioSummary }                        = require('./audio-generator');
 const { generateAlertCard }                           = require('./card-generator');
+const { indexArticle }                                = require('./vector-store');
 const Deduplicator                                    = require('./deduplicator');
 const logger                                          = require('./logger');
 
@@ -328,6 +329,7 @@ class NewsPipeline {
 
           if (anySentOk) {
             this.deduplicator.markSeen(article.url, article.title, article.source);
+            indexArticle(article, summary);
             sentCount++;
           }
 

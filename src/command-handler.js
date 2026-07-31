@@ -3,15 +3,16 @@
 // Supported commands: /status, /search <keyword>, /sources, /help
 
 const { searchSeenArticles, getTotalSeenCount } = require('./db');
+const { answerQuestion } = require('./rag-engine');
 
 /**
  * Handle incoming command text.
- * @param {string} text - Raw command string (e.g. "/search ransomware")
+ * @param {string} text - Raw command string (e.g. "/search ransomware" or "/ask What zero-days were patched?")
  * @param {object} config - Application configuration object
  * @param {number} startTime - Bot boot timestamp
- * @returns {string} - Formatted response string
+ * @returns {Promise<string>} - Formatted response string
  */
-function handleCommand(text, config, startTime) {
+async function handleCommand(text, config, startTime) {
   const trimmed = String(text || '').trim();
   if (!trimmed.startsWith('/')) return null;
 
@@ -71,6 +72,12 @@ function handleCommand(text, config, startTime) {
       ].join('\n');
     }
 
+    case '/ask': {
+      if (!args) return '⚠️ Usage: `/ask <question>` (e.g. `/ask What supply chain attacks occurred this week?`)';
+      const question = args.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 200).trim();
+      return await answerQuestion(question);
+    }
+
     case '/help':
     default: {
       return [
@@ -79,6 +86,7 @@ function handleCommand(text, config, startTime) {
         '• `/status` - View bot uptime and delivery statistics',
         '• `/sources` - List all active RSS news feeds',
         '• `/search <keyword>` - Search recent articles by topic',
+        '• `/ask <question>` - Ask AI conversational questions about your news',
         '• `/help` - Show this command reference',
         '━━━━━━━━━━━━━━━━━━━━━━━━━'
       ].join('\n');
