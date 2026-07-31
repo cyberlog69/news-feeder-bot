@@ -23,6 +23,8 @@ const { formatArticle, formatArticleForTelegram, isCritical } = require('./forma
 const { scoreArticle, passesScoreThreshold }          = require('./scorer');
 const { enrichArticle }                               = require('./threat-intel');
 const { translateArticleData }                        = require('./translator');
+const { generateAudioSummary }                        = require('./audio-generator');
+const { generateAlertCard }                           = require('./card-generator');
 const Deduplicator                                    = require('./deduplicator');
 const logger                                          = require('./logger');
 
@@ -273,6 +275,18 @@ class NewsPipeline {
                 currentIntel   = localized.threatIntel;
               }
 
+              // Generate visual alert card for critical news
+              if (critical) {
+                generateAlertCard(currentArticle, critical, currentIntel);
+              }
+
+              // Generate TTS audio summary if enabled or for critical news
+              const enableAudio = process.env.ENABLE_AUDIO_SUMMARY === 'true' || critical;
+              let audioObj = null;
+              if (enableAudio) {
+                audioObj = await generateAudioSummary(currentArticle, currentSummary, targetLang).catch(() => null);
+              }
+
               if (type === 'discord') {
                 // Use rich embeds for Discord
                 await sender.sendEmbed(currentArticle, currentSummary, critical, currentIntel);
@@ -296,6 +310,11 @@ class NewsPipeline {
                   ]);
                 }
                 await sender.sendMessageWithButtons(localizedTgMsg, buttons);
+
+                // Send voice note on Telegram if audio generated
+                if (audioObj?.audioPath && typeof sender.sendVoiceNote === 'function') {
+                  await sender.sendVoiceNote(audioObj.audioPath, `🎙️ Audio Summary: ${currentArticle.title.slice(0, 100)}`);
+                }
               } else {
                 const localizedWaMsg = formatArticle(currentArticle, currentSummary, aiUsed, severityKeywords, currentIntel);
                 await sender.sendMessage(localizedWaMsg);

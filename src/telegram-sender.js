@@ -185,6 +185,46 @@ class TelegramSender {
       }
       throw err;
     }
+  /**
+   * Send an audio file as a native playable Telegram Voice Note.
+   * @param {string} audioPath - Path to local .mp3 or .ogg file
+   * @param {string} [caption] - Optional caption text
+   */
+  async sendVoiceNote(audioPath, caption = '') {
+    const fs = require('fs');
+    if (!fs.existsSync(audioPath)) {
+      throw new Error(`Audio file not found: ${audioPath}`);
+    }
+
+    const url = `${TG_API}/bot${this.token}/sendVoice`;
+    const fileBuffer = fs.readFileSync(audioPath);
+    const blob = new Blob([fileBuffer], { type: 'audio/ogg' });
+
+    const formData = new FormData();
+    formData.append('chat_id', this.target);
+    formData.append('voice', blob, 'summary.mp3');
+    if (caption) formData.append('caption', caption.slice(0, 1024));
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal
+      });
+
+      const json = await res.json();
+      if (!json.ok) {
+        throw new Error(`Telegram sendVoice error: ${json.description || 'Unknown error'}`);
+      }
+      logger.success(`[Telegram] Voice note sent (${Math.round(fileBuffer.length / 1024)} KB)`);
+    } catch (err) {
+      logger.warn(`Telegram sendVoiceNote failed: ${err.message}`);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
