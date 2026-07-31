@@ -22,6 +22,7 @@ const { summarizeArticle }                            = require('./summarizer');
 const { formatArticle, formatArticleForTelegram, isCritical } = require('./formatter');
 const { scoreArticle, passesScoreThreshold }          = require('./scorer');
 const { enrichArticle }                               = require('./threat-intel');
+const { translateArticleData }                        = require('./translator');
 const Deduplicator                                    = require('./deduplicator');
 const logger                                          = require('./logger');
 
@@ -253,32 +254,53 @@ class NewsPipeline {
 
           for (const { name, sender, type } of targetSenders) {
             try {
+              // Resolve per-platform target language setting (e.g. TELEGRAM_LANGUAGE, DISCORD_LANGUAGE)
+              const envKey = `${type.toUpperCase().replace(/-/g, '_')}_LANGUAGE`;
+              const targetLang = (process.env[envKey] || process.env.DEFAULT_LANGUAGE || 'en').toLowerCase().trim();
+
+              // Translate data on the fly if target language is not English
+              let currentArticle = article;
+              let currentSummary = summary;
+              let currentIntel   = threatIntel;
+
+              if (targetLang !== 'en') {
+                const localized = await translateArticleData(article, summary, threatIntel, targetLang).catch((err) => {
+                  logger.warn(`[${name}] Translation to [${targetLang}] failed: ${err.message}`);
+                  return { article, summary, threatIntel };
+                });
+                currentArticle = localized.article;
+                currentSummary = localized.summary;
+                currentIntel   = localized.threatIntel;
+              }
+
               if (type === 'discord') {
                 // Use rich embeds for Discord
-                await sender.sendEmbed(article, summary, critical, threatIntel);
+                await sender.sendEmbed(currentArticle, currentSummary, critical, currentIntel);
               } else if (type === 'google-chat') {
                 // Use Card v2 for Google Chat
-                await sender.sendCard(article, summary, critical, threatIntel);
+                await sender.sendCard(currentArticle, currentSummary, critical, currentIntel);
               } else if (type === 'slack') {
                 // Use Block Kit for Slack
-                await sender.sendBlockKit(article, summary, critical, threatIntel);
+                await sender.sendBlockKit(currentArticle, currentSummary, critical, currentIntel);
               } else if (type === 'teams') {
                 // Use Adaptive Cards for MS Teams
-                await sender.sendAdaptiveCard(article, summary, critical, threatIntel);
+                await sender.sendAdaptiveCard(currentArticle, currentSummary, critical, currentIntel);
               } else if (type === 'telegram') {
                 // Telegram: send with inline "Read Full Article" + "Share" buttons
+                const localizedTgMsg = formatArticleForTelegram(currentArticle, currentSummary, aiUsed, severityKeywords, currentIntel);
                 const buttons = [];
-                if (article.url) {
+                if (currentArticle.url) {
                   buttons.push([
-                    { text: '📖 Read Full Article', url: article.url },
-                    { text: '🔗 Share',             url: `https://t.me/share/url?url=${encodeURIComponent(article.url)}&text=${encodeURIComponent(article.title.slice(0, 100))}` }
+                    { text: '📖 Read Full Article', url: currentArticle.url },
+                    { text: '🔗 Share',             url: `https://t.me/share/url?url=${encodeURIComponent(currentArticle.url)}&text=${encodeURIComponent(currentArticle.title.slice(0, 100))}` }
                   ]);
                 }
-                await sender.sendMessageWithButtons(telegramMsg, buttons);
+                await sender.sendMessageWithButtons(localizedTgMsg, buttons);
               } else {
-                await sender.sendMessage(whatsappMsg);
+                const localizedWaMsg = formatArticle(currentArticle, currentSummary, aiUsed, severityKeywords, currentIntel);
+                await sender.sendMessage(localizedWaMsg);
               }
-              logger.success(`[${name}] Sent: ${article.title.slice(0, 55)}…`);
+              logger.success(`[${name}] Sent (${targetLang.toUpperCase()}): ${currentArticle.title.slice(0, 55)}…`);
               anySentOk = true;
             } catch (err) {
               logger.error(`[${name}] Send failed: ${err.message.split('\n')[0]}`);

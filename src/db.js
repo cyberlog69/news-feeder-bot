@@ -49,6 +49,14 @@ function initDb() {
         percentile REAL,
         updated_at TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS translation_cache (
+        text_hash TEXT,
+        target_lang TEXT,
+        translation TEXT,
+        created_at TEXT,
+        PRIMARY KEY (text_hash, target_lang)
+      );
     `);
 
     // Migrate legacy JSON files if they exist
@@ -211,6 +219,34 @@ function setCveCache(cveId, data) {
   stmt.run(cveId, data.cvss || null, data.severity || null, data.epss || null, data.percentile || null, new Date().toISOString());
 }
 
+// ── Translation Cache API ────────────────────────────────────────────────────
+
+const crypto = require('crypto');
+
+function hashText(text) {
+  return crypto.createHash('sha256').update(String(text || '')).digest('hex');
+}
+
+function getCachedTranslation(text, targetLang) {
+  if (!text || !targetLang) return null;
+  const database = initDb();
+  const h = hashText(text);
+  const stmt = database.prepare('SELECT translation FROM translation_cache WHERE text_hash = ? AND target_lang = ? LIMIT 1');
+  const row = stmt.get(h, String(targetLang).toLowerCase().trim());
+  return row ? row.translation : null;
+}
+
+function setCachedTranslation(text, targetLang, translation) {
+  if (!text || !targetLang || !translation) return;
+  const database = initDb();
+  const h = hashText(text);
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO translation_cache (text_hash, target_lang, translation, created_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  stmt.run(h, String(targetLang).toLowerCase().trim(), translation, new Date().toISOString());
+}
+
 module.exports = {
   initDb,
   isUrlSeen,
@@ -221,5 +257,7 @@ module.exports = {
   getCachedSummary,
   setCachedSummary,
   getCveCache,
-  setCveCache
+  setCveCache,
+  getCachedTranslation,
+  setCachedTranslation
 };

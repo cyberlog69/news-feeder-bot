@@ -47,6 +47,20 @@ function validateEnv() {
     warnings.push(`Unknown SUMMARIZER_PROVIDER "${provider}". Allowed options: ${ALLOWED_PROVIDERS.join(', ')}`);
   }
 
+  // 4. Multi-Language configuration logging
+  const defaultLang = (process.env.DEFAULT_LANGUAGE || 'en').toLowerCase().trim();
+  const configuredLangs = [];
+  if (process.env.WHATSAPP_LANGUAGE)    configuredLangs.push(`WhatsApp:${process.env.WHATSAPP_LANGUAGE}`);
+  if (process.env.TELEGRAM_LANGUAGE)    configuredLangs.push(`Telegram:${process.env.TELEGRAM_LANGUAGE}`);
+  if (process.env.DISCORD_LANGUAGE)     configuredLangs.push(`Discord:${process.env.DISCORD_LANGUAGE}`);
+  if (process.env.SLACK_LANGUAGE)       configuredLangs.push(`Slack:${process.env.SLACK_LANGUAGE}`);
+  if (process.env.GOOGLE_CHAT_LANGUAGE) configuredLangs.push(`GoogleChat:${process.env.GOOGLE_CHAT_LANGUAGE}`);
+  if (process.env.TEAMS_LANGUAGE)       configuredLangs.push(`Teams:${process.env.TEAMS_LANGUAGE}`);
+
+  if (configuredLangs.length > 0) {
+    logger.info(`Multi-Language Routing: default=${defaultLang} | ${configuredLangs.join(', ')}`);
+  }
+
   if (warnings.length > 0) {
     warnings.forEach((w) => logger.warn(`[Env] ${w}`));
   }
