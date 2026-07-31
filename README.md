@@ -25,11 +25,15 @@
 - [Deep Threat Intelligence](#-deep-threat-intelligence)
 - [Multi-Language & Internationalization](#-multi-language--internationalization)
 - [Audio & Multimedia Delivery](#-audio--multimedia-delivery)
+- [Configuration Reference](#️-configuration-reference)
+- [Bot Commands](#-bot-commands)
+- [Web Dashboard & Administrative APIs](#-web-dashboard--administrative-apis)
 - [Platform Setup Guides](#-platform-setup-guides)
 - [Deployment Guides](#-deployment-guides)
-- [Web Dashboard & Admin Manager](#-web-dashboard--admin-manager)
+- [npm Commands](#-npm-commands)
 - [Automated Unit Testing](#-automated-testing)
 - [Security](#-security)
+- [Troubleshooting](#-troubleshooting)
 
 ---
 
@@ -67,15 +71,15 @@
 
 ## 📲 Supported Delivery Channels
 
-1. **WhatsApp**: Personal DMs, Groups, and Channels via WhatsApp Web.
-2. **Telegram**: Channels, Groups, DMs with inline reading buttons and native Voice Notes.
-3. **Discord**: Rich Embeds via Webhooks with severity color coding.
-4. **Google Chat Space**: Rich Cards v2 delivered directly to Google Chat Spaces.
-5. **Slack**: Rich Block Kit sections with interactive buttons.
-6. **Microsoft Teams**: Adaptive Cards formatted for SOC channels.
-7. **HTML Email Newsletters**: Responsive dark-themed HTML emails via SendGrid/Resend/SMTP.
-8. **Mobile Push Notifications**: Instant phone/smartwatch push via Pushover and Ntfy.sh.
-9. **Outbound Webhooks**: Structured JSON threat payload exports for SOAR/SIEM (n8n, Zapier, Splunk, Shuffle).
+1. **WhatsApp**: Personal DMs, Groups, and Channels via WhatsApp Web (`whatsapp-web.js`).
+2. **Telegram**: Channels, Groups, DMs with inline reading buttons and native Voice Notes (`telegram-sender.js`).
+3. **Discord**: Rich Embeds via Webhooks with severity color coding (`discord-sender.js`).
+4. **Google Chat Space**: Rich Cards v2 delivered directly to Google Chat Spaces (`google-chat-sender.js`).
+5. **Slack**: Rich Block Kit sections with interactive buttons (`slack-sender.js`).
+6. **Microsoft Teams**: Adaptive Cards formatted for SOC channels (`teams-sender.js`).
+7. **HTML Email Newsletters**: Responsive dark-themed HTML emails via SendGrid/Resend/SMTP (`email-sender.js`).
+8. **Mobile Push Notifications**: Instant phone/smartwatch push via Pushover and Ntfy.sh (`push-sender.js`).
+9. **Outbound Webhooks**: Structured JSON threat payload exports for SOAR/SIEM (n8n, Zapier, Splunk, Shuffle) (`webhook-sender.js`).
 
 ---
 
@@ -122,9 +126,9 @@ Ask natural language questions about recent cybersecurity incidents and news dir
 ## 🛡️ Deep Threat Intelligence
 
 Security news articles are automatically analyzed by `src/threat-intel.js` and enriched with:
-- **CVE & CVSS v3 Scores**: Extracted and queried via FIRST.org / CIRCL APIs.
+- **CVE & CVSS v3 Scores**: Extracted and queried via FIRST.org / CIRCL APIs with SQLite caching.
 - **EPSS Scores**: Percentile exploit likelihood prediction score.
-- **IOC Parsing**: IPv4 addresses, SHA-256/MD5 hashes, and defanged domains.
+- **IOC Parsing**: IPv4 addresses, SHA-256/MD5 hashes, and defanged domains (`1.1.1[.]1`, `example[.]com`).
 - **MITRE ATT&CK Mapping**: Maps threat actor tactics (e.g. `T1059 Command and Scripting Interpreter`, `T1486 Data Encrypted for Impact`).
 
 ---
@@ -140,6 +144,9 @@ WHATSAPP_LANGUAGE=hi
 DEFAULT_LANGUAGE=en
 ```
 
+- Supports **13+ ISO language codes** (`en`, `es`, `de`, `fr`, `hi`, `ja`, `pt`, `zh`, `ru`, `it`, `nl`, `tr`, `pl`).
+- SQLite translation caching (`translation_cache` table) prevents redundant API calls.
+
 ---
 
 ## 🔊 Audio & Multimedia Delivery
@@ -150,15 +157,80 @@ DEFAULT_LANGUAGE=en
 
 ---
 
+## ⚙️ Configuration Reference
+
+### Environment Variables (`.env`)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `SUMMARIZER_PROVIDER` | No | `groq` | Choose: `groq`, `gemini`, `openrouter`, `huggingface`, `ollama`, `extractive` |
+| `GROQ_API_KEY` | Optional | — | Free API key from [console.groq.com](https://console.groq.com) |
+| `GEMINI_API_KEY` | Optional | — | Free API key from [aistudio.google.com](https://aistudio.google.com) |
+| `OPENROUTER_API_KEY` | Optional | — | API key from [openrouter.ai](https://openrouter.ai) |
+| `WHATSAPP_TARGET` | Optional | — | Phone number, group ID, or group name |
+| `TELEGRAM_BOT_TOKEN` | Optional | — | Telegram Bot API token from `@BotFather` |
+| `TELEGRAM_TARGET` | Optional | — | Channel handle (`@mychannel`) or Chat ID |
+| `DISCORD_WEBHOOK_URL` | Optional | — | Discord channel webhook URL |
+| `GOOGLE_CHAT_WEBHOOK_URL` | Optional | — | Google Chat Space Webhook Cards v2 URL |
+| `SLACK_WEBHOOK_URL` | Optional | — | Slack incoming webhook URL |
+| `TEAMS_WEBHOOK_URL` | Optional | — | Microsoft Teams incoming webhook URL |
+| `EMAIL_TO` | Optional | — | Recipient email address for HTML newsletters |
+| `EMAIL_FROM` | Optional | — | Sender email address (`newsbot@example.com`) |
+| `EMAIL_API_KEY` | Optional | — | SendGrid or Resend API key |
+| `NTFY_TOPIC_URL` | Optional | — | Ntfy.sh topic URL (`https://ntfy.sh/my_topic`) |
+| `PUSHOVER_USER_KEY` | Optional | — | Pushover user key |
+| `PUSHOVER_API_TOKEN` | Optional | — | Pushover application token |
+| `OUTBOUND_WEBHOOK_URL` | Optional | — | Outbound HTTP webhook endpoint for SOAR/SIEM |
+| `ENABLE_AUDIO_SUMMARY` | Optional | `false` | Set to `true` to enable TTS voice summaries for all news |
+| `DEFAULT_LANGUAGE` | Optional | `en` | Default output language code (`en`, `es`, `de`, `fr`, etc.) |
+| `DASHBOARD_TOKEN` | Optional | — | Secret token to secure `/trigger` and administrative APIs |
+| `PORT` | Optional | `3000` | HTTP port for Web Dashboard and health check |
+
+---
+
+## 🤖 Bot Commands
+
+Interactive commands supported across WhatsApp, Telegram, Discord, and Web Dashboard:
+
+| Command | Usage | Description |
+|---|---|---|
+| `/status` | `/status` | View bot uptime, total delivered articles, active sources, and AI provider status |
+| `/sources` | `/sources` | List all active RSS news feeds and their categories |
+| `/search` | `/search <keyword>` | Search recent indexed articles by keyword (e.g. `/search ransomware`) |
+| `/ask` | `/ask <question>` | Ask AI conversational questions about your news database (RAG) |
+| `/help` | `/help` | Display command reference guide |
+
+---
+
+## 🎛️ Web Dashboard & Administrative APIs
+
+The Web Dashboard listens on `http://localhost:3000`:
+
+### Endpoints
+- `GET /` — Full HTML Web Dashboard with tabbed navigation (`Overview`, `Feed Health`, `Rules & Filters`).
+- `GET /health` — JSON Health Check for cloud platforms (`{"status": "ok", "uptime": 120}`).
+- `GET /metrics` — System metrics and Prometheus format (`/metrics?format=prometheus`).
+- `GET /events` — Server-Sent Events (SSE) live log stream.
+- `POST /trigger` — Trigger manual pipeline cycle.
+- `GET /api/feed-health` — Real-time RSS Feed Health Index matrix.
+- `GET /api/sources` — Active sources list enriched with latency and error metrics.
+- `POST /api/sources/toggle` — Toggle source on/off in `config.json` with hot reloading.
+- `POST /api/sources/add` — Add a new RSS feed URL.
+- `POST /api/sources/delete` — Delete an existing RSS feed.
+
+---
+
 ## 📋 Platform Setup Guides
 
 ### 1. WhatsApp
 1. Set `WHATSAPP_TARGET` in `.env` (phone number or group name/ID).
 2. Run `npm start` and scan the QR code in the terminal.
+3. Run `npm run list-groups` to find WhatsApp group IDs.
 
 ### 2. Telegram
 1. Message `@BotFather` on Telegram → `/newbot` → Copy API Token into `TELEGRAM_BOT_TOKEN`.
 2. Add bot to group/channel and set `TELEGRAM_TARGET` (e.g. `@mychannel` or chat ID).
+3. Run `npm run list-telegram-chats` to find group/channel IDs.
 
 ### 3. Discord
 1. Channel Settings → Integrations → Webhooks → New Webhook → Copy URL into `DISCORD_WEBHOOK_URL`.
@@ -187,42 +259,30 @@ DEFAULT_LANGUAGE=en
 ## 🌐 Deployment Guides
 
 ### Option 1: Docker & Docker Compose (Recommended)
-The repository includes a production-ready `Dockerfile` and `docker-compose.yml` pre-configured with Chromium for Headless WhatsApp support.
-
 ```bash
-# 1. Clone & create .env
-cp .env.example .env
-
-# 2. Build & launch in detached mode
+# Build & launch in detached mode
 docker-compose up -d --build
 
-# 3. View live logs & QR code
+# View live logs & QR code
 docker-compose logs -f
 ```
 
 ### Option 2: Cloud Deployment (Railway / Render / Fly.io)
-1. Fork or push your repository to GitHub.
-2. Create a new service on Railway, Render, or Fly.io connected to your repository.
-3. Configure the following Environment Variables in your cloud dashboard:
-   - `NODE_ENV=production`
-   - `GROQ_API_KEY=your_key`
-   - `TELEGRAM_BOT_TOKEN=your_token`
-   - `DASHBOARD_TOKEN=your_secret_admin_token`
-4. Deploy — the platform automatically detects `PORT` and exposes `/health` for health checks!
+1. Push repository to GitHub.
+2. Create service on Railway/Render/Fly.io.
+3. Set environment variables (`NODE_ENV=production`, `PORT`, `GROQ_API_KEY`, `DASHBOARD_TOKEN`).
+4. Health check endpoint `/health` is monitored automatically.
 
 ### Option 3: Linux VPS (Ubuntu/Debian Systemd Service)
-Run News Feeder Bot as a persistent system daemon on any Linux VPS:
-
 ```bash
-# 1. Install Node.js 22 LTS
+# 1. Install Node.js 22 LTS & Chromium
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs chromium-browser
 
-# 2. Create Systemd Service File
+# 2. Systemd service setup
 sudo nano /etc/systemd/system/news-feeder-bot.service
 ```
 
-Paste the following systemd configuration:
 ```ini
 [Unit]
 Description=News Feeder Bot Service
@@ -242,26 +302,26 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-# 3. Enable & start service
 sudo systemctl daemon-reload
 sudo systemctl enable news-feeder-bot
 sudo systemctl start news-feeder-bot
-
-# Check status
-sudo systemctl status news-feeder-bot
 ```
 
 ---
 
-## 🎛️ Web Dashboard & Admin Manager
+## 💻 npm Commands
 
-The built-in Web Dashboard listens on `process.env.PORT` or `3000` (`http://localhost:3000`):
-
-- **📊 Live Stats & Log Stream (SSE)**: View delivery statistics, recent articles, and real-time log output via Server-Sent Events (`/events`).
-- **📡 Feed Health Index**: Monitor RSS feed latency (ms), HTTP status codes, and error counts via `GET /api/feed-health`.
-- **🎛️ Visual Feed Manager**: Add, toggle, or delete RSS sources directly via REST APIs (`GET /api/sources`, `POST /api/sources/add`, `POST /api/sources/toggle`, `POST /api/sources/delete`).
-- **📈 Prometheus Metrics**: Ingest metrics into Grafana/Datadog via `GET /metrics?format=prometheus`.
-- **🔒 Dashboard Security**: Protect manual triggers and administrative APIs by setting `DASHBOARD_TOKEN`.
+```bash
+npm start                # Launch News Feeder Bot
+npm test                 # Run native unit test suite (--test-concurrency=1)
+npm run add-source       # Interactively add RSS source feed
+npm run list-groups      # Discover WhatsApp group IDs
+npm run list-telegram-chats # Discover Telegram chat IDs
+npm run docker:up        # Start Docker Compose container
+npm run docker:down      # Stop Docker Compose container
+npm run docker:logs      # View Docker container logs
+npm run audit            # Run npm vulnerability audit
+```
 
 ---
 
@@ -294,6 +354,17 @@ npm test
 - **0 npm audit vulnerabilities**
 - **SSRF Prevention**: Internal IP blocking (`127.0.0.1`, `169.254.169.254`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`)
 - **Sanitized Input**: Control character stripping and HTML escaping across all senders
+
+---
+
+## ❓ Troubleshooting
+
+| Issue | Cause | Solution |
+|---|---|---|
+| `database is locked` | SQLite concurrent access | Tests are pre-configured with `--test-concurrency=1` in `package.json` |
+| `GROQ_API_KEY not set` | Missing AI provider key | Get free key at [console.groq.com](https://console.groq.com) or set `SUMMARIZER_PROVIDER=extractive` |
+| `Puppeteer Chrome Error` | Chrome path missing on VPS | Install Chromium (`apt install chromium-browser`) and set `CHROME_PATH=/usr/bin/chromium` |
+| `EADDRINUSE: port 3000` | Port in use | Change `PORT` in `.env` or kill existing process |
 
 ---
 
