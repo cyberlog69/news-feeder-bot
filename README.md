@@ -1,9 +1,9 @@
 <div align="center">
 
-# 📰 News Feeder Bot
+# 📰 News Feeder Bot v3.7
 
-### Automated cybersecurity & tech news — delivered to WhatsApp, Telegram, and Discord
-#### Multi-provider AI summaries · keyword filtering · severity alerts · live dashboard · production-ready
+### Automated cybersecurity & tech news intelligence — delivered across 9 platforms
+#### Threat Intel (CVE/EPSS/IOC/MITRE) · Multi-Language Translation · TTS Voice Summaries · RAG Conversational AI (`/ask`) · RSS Feed Health · 0 Vulnerabilities
 
 [![CI](https://github.com/cyberlog69/news-feeder-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/cyberlog69/news-feeder-bot/actions)
 [![Security](https://img.shields.io/badge/npm%20audit-0%20vulnerabilities-brightgreen)](https://npmjs.com)
@@ -17,35 +17,32 @@
 
 ## 📌 Table of Contents
 
-- [What's New](#-whats-new)
+- [What's New in v3.7](#-whats-new-in-v37)
 - [Features](#-features)
+- [Delivery Channels](#-supported-delivery-channels)
 - [Quick Start](#-quick-start)
-- [Platform Setup](#-platform-setup)
-- [Configuration](#️-configuration)
-- [Deployment](#-deployment)
-- [Project Structure](#️-project-structure)
-- [News Sources](#-default-news-sources)
-- [Web Dashboard](#-web-dashboard)
-- [AI Summarization](#-ai-summarization)
+- [RAG & Conversational AI (`/ask`)](#-rag--conversational-ai-ask-your-news)
+- [Threat Intelligence & Enrichment](#-deep-threat-intelligence)
+- [Multi-Language Translation](#-multi-language--internationalization)
+- [Audio & Multimedia Delivery](#-audio--multimedia-delivery)
+- [Platform Setup Guides](#-platform-setup-guides)
+- [Web Dashboard & Admin Manager](#-web-dashboard--admin-manager)
+- [Automated Unit Testing](#-automated-testing)
 - [Security](#-security)
-- [npm Commands](#-npm-commands)
-- [Troubleshooting](#-troubleshooting)
 
 ---
 
-## 🆕 What's New
+## 🆕 What's New in v3.7
 
-### v3.2 — Enterprise Webhooks, Native SQLite & Automated Testing
-| Change | Details |
+| Module | Feature Details |
 |---|---|
-| 💬 **Google Chat (Hangouts)** | Deliver news directly into Google Chat Spaces via Webhooks using rich Cards v2 |
-| 💼 **Slack & MS Teams** | Enterprise workplace delivery via Slack Block Kit and MS Teams Adaptive Cards |
-| 🗄️ **Native SQLite (`node:sqlite`)** | Crash-proof SQLite storage (`data/newsbot.sqlite`) with automatic JSON migration |
-| ⚡ **AI Fallback Cascade** | Auto-cascade through AI providers (`Groq` → `Gemini` → `OpenRouter` → `HuggingFace` → `Ollama`) |
-| 📡 **Real-Time Live UI (SSE)** | Dashboard streams live log updates instantly via Server-Sent Events (`/events`) |
-| 📊 **Prometheus Metrics** | Ingest metrics into Grafana/Datadog using standard Prometheus format (`/metrics?format=prometheus`) |
-| 🧪 **Automated Test Suite** | Native Node.js unit tests (`npm test`) covering security, scoring, formatters, and DB |
-| 🤖 **Bot Commands** | Interactive user commands (`/status`, `/search <keyword>`, `/sources`, `/help`) |
+| 🧠 **RAG & Conversational AI** | Ask natural language questions via `/ask <question>`. Searches historical news in SQLite using term-frequency vector embeddings and Cosine Similarity, generating cited AI responses. |
+| 🛡️ **Threat Intelligence** | Auto-enriches security news with CVE details, FIRST.org EPSS exploit probabilities, IOC extraction (IPs, hashes, defanged domains), and MITRE ATT&CK mapping. |
+| 🌍 **Multi-Language Routing** | Translate news summaries on the fly per platform (`TELEGRAM_LANGUAGE=es`, `DISCORD_LANGUAGE=de`). Supports 13+ languages with SQLite translation caching. |
+| 🔊 **Audio & Multimedia** | Text-to-Speech narrative summaries, native **Telegram Voice Notes**, and dynamic SVG visual alert cards for critical zero-day news. |
+| 📧 **9 Delivery Channels** | WhatsApp, Telegram, Discord, Google Chat, Slack, MS Teams, HTML Email Newsletters, Mobile Push (Pushover/Ntfy.sh), and Outbound SOAR/SIEM Webhooks. |
+| 🎛️ **Feed Health & Admin UI** | RSS Feed Health Index tracking latency (ms), HTTP status, and error counts. Visual Feed Manager REST APIs (`/api/sources`) to add/toggle feeds without manual config edits. |
+| 🧪 **34/34 Unit Tests** | Automated Node.js native test suite (`npm test`) with 100% pass rate. |
 
 ---
 
@@ -53,547 +50,97 @@
 
 | Feature | Description |
 |---|---|
-| 📱 **WhatsApp Delivery** | Send to personal chats, groups, or channels — multi-target supported |
-| ✈️ **Telegram Delivery** | Send to channels, groups, or DMs — native Bot API, no extra libs |
-| 🎮 **Discord Delivery** | Rich embeds via webhooks — severity color-coded, zero dependencies |
-| 🟢 **Google Chat Space** | Rich Cards v2 delivered directly into Google Chat (Hangouts) spaces |
-| 💼 **Slack & MS Teams** | Rich Block Kit and Adaptive Cards webhooks for workplace SOC rooms |
+| 🧠 **RAG & Conversational AI** | Query historical news database via `/ask` command across all messaging channels |
+| 🛡️ **Threat Intelligence** | CVE, EPSS exploit likelihood, IOCs (IPs/Hashes), and MITRE ATT&CK technique IDs |
+| 🌍 **Multi-Language Support** | Instant per-platform translation for 13+ ISO language codes |
+| 🎙️ **TTS Voice Summaries** | Text-to-Speech narration delivered as native Telegram Voice Notes |
+| 🖼️ **SVG Visual Alert Cards** | Dynamically rendered social alert cards for `🚨 CRITICAL ALERT` news |
+| 📱 **9 Delivery Channels** | WhatsApp, Telegram, Discord, Google Chat, Slack, MS Teams, Email, Push, Webhook |
 | 🤖 **Multi-Provider AI** | Groq, Gemini, OpenRouter, HuggingFace, Ollama, or Extractive fallback |
-| 🗄️ **Native SQLite Storage** | Atomic transactions, zero JSON corruption, auto-migrated from legacy files |
+| 🗄️ **Native SQLite Storage** | `data/newsbot.sqlite` for article deduplication, threat intel cache, and vector RAG |
+| 📊 **Feed Health Matrix** | Real-time monitoring of response latency, HTTP status, and error counts |
 | 🎯 **Keyword Filtering** | Include or exclude articles by keywords (e.g. `ransomware`, `CVE`) |
-| 🚨 **Severity Alerts** | Auto `🚨 CRITICAL ALERT` badge for zero-days, RCE, active exploits |
-| 📋 **Daily Digest** | Bundle all articles into one daily message at a scheduled time |
-| ⚡ **ETag Caching** | RSS feeds only re-fetched when actually updated — 3× faster |
-| 💾 **Persistent Cache** | AI summaries survive bot restarts — no wasted API calls |
-| ⚖️ **Article Scoring** | Skip low-value articles by importance score (0.0–1.0) |
-| 🔀 **Source Routing** | Send specific sources to specific platforms independently |
-| 🔁 **Multi-Target** | Comma-separated lists for WhatsApp groups and Telegram channels |
-| 📊 **Web Dashboard & SSE** | Dark-mode local UI with stats, recent articles, and SSE live log streaming |
-| 🩺 **Health & Prometheus** | `/health` and Prometheus-compatible `/metrics` for monitoring |
-| 🧪 **Automated Testing** | `npm test` runs 16+ unit tests covering all core modules |
-| 🔒 **Security Hardened** | SSRF protection, prompt injection prevention, 0 audit vulnerabilities |
+| 🚨 **Severity Alerts** | Auto `🚨 CRITICAL ALERT` badge for zero-days, RCE, and active exploits |
+| 🔒 **Security Hardened** | SSRF protection, prompt injection prevention, 0 npm audit vulnerabilities |
+
+---
+
+## 📲 Supported Delivery Channels
+
+1. **WhatsApp**: Personal DMs, Groups, and Channels.
+2. **Telegram**: Channels, Groups, DMs with inline buttons and native Voice Notes.
+3. **Discord**: Rich Embeds via Webhooks with severity color coding.
+4. **Google Chat Space**: Rich Cards v2 delivered to Google Chat Spaces.
+5. **Slack**: Rich Block Kit sections with interactive buttons.
+6. **Microsoft Teams**: Adaptive Cards formatted for SOC channels.
+7. **HTML Email Newsletters**: Responsive dark-themed HTML emails via SendGrid/Resend/SMTP.
+8. **Mobile Push Notifications**: Instant phone/smartwatch push via Pushover and Ntfy.sh.
+9. **Outbound Webhooks**: Structured JSON threat payload exports for SOAR/SIEM (n8n, Zapier, Splunk, Shuffle).
 
 ---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Node.js 22+ (LTS)** → [nodejs.org](https://nodejs.org) *(required for built-in `node:sqlite` database & native test runner)*
+- **Node.js 22+ (LTS)** → [nodejs.org](https://nodejs.org) *(required for `node:sqlite` database & native test runner)*
 - **npm 10+** → Bundled automatically with Node.js 22+
 - **Google Chrome** → [google.com/chrome](https://google.com/chrome) *(WhatsApp only)*
-- **AI API Key** *(optional)* → Free [Groq key](https://console.groq.com) or [Gemini key](https://aistudio.google.com) — or set `SUMMARIZER_PROVIDER=extractive` for zero-AI operation
 
 ### 3-Step Setup
 ```bash
-# 1. Clone
+# 1. Clone repository
 git clone https://github.com/cyberlog69/news-feeder-bot.git
 cd news-feeder-bot
 
-# 2. Install
+# 2. Install dependencies
 npm install
 
-# 3. Configure and run
+# 3. Configure & Run
 cp .env.example .env
-# Edit .env with your keys and targets, then:
 npm start
 ```
 
-**WhatsApp first run:** scan the QR code shown in terminal with WhatsApp → Linked Devices → Link a Device. Session is saved automatically for all future runs.
+---
 
-> **Telegram or Discord only?** No QR code needed — just set your bot token and run.
+## 🧠 RAG & Conversational AI (`Ask Your News`)
 
-> **No AI key?** Set `SUMMARIZER_PROVIDER=extractive` in `.env` — the bot extracts article sentences directly, no API required.
+Ask questions about recent cybersecurity incidents and news directly in chat:
+```text
+/ask What ransomware attacks occurred this week?
+/ask Tell me about CVE-2024-30078
+/ask What supply chain vulnerabilities were patched?
+```
+The bot searches SQLite vector storage using term-frequency cosine similarity and synthesizes a cited response linking directly to source articles.
 
 ---
 
-## 📱 Platform Setup
+## 🛡️ Deep Threat Intelligence
 
-You can deliver news to **any combination** of the 6 supported platforms simultaneously. Set at least one in your `.env`.
-
----
-
-### 1. 📱 WhatsApp Setup (Personal DMs & Group Chats)
-
-| Step | Action |
-|---|---|
-| 1 | Set your target in `.env` (`WHATSAPP_TARGET=...`) |
-| 2 | Run `npm start` — a QR code appears in your terminal & web dashboard |
-| 3 | Open WhatsApp on your phone → **Settings** → **Linked Devices** → **Link a Device** → scan QR |
-| 4 | Session is saved automatically to `.wwebjs_auth/` — no re-scanning required on future restarts |
-| 5 | **Find Group IDs:** Run `npm run list-groups` to list all groups your account belongs to and copy their `@g.us` IDs |
-
-```env
-# Single target (phone number, group ID, or group name)
-WHATSAPP_TARGET=919876543210
-WHATSAPP_TARGET=120363409960337815@g.us
-WHATSAPP_TARGET=My Cyber News Group
-
-# Multiple targets (comma-separated)
-WHATSAPP_TARGET=120363409960337815@g.us,120363409960337816@g.us
-```
+Security news articles are automatically analyzed and enriched with:
+- **CVE & CVSS v3 Scores**: Extracted and queried via FIRST.org / CIRCL APIs.
+- **EPSS Scores**: Percentile exploit likelihood prediction score.
+- **IOC Parsing**: IPv4 addresses, SHA-256/MD5 hashes, and defanged domains.
+- **MITRE ATT&CK Mapping**: Maps threat actor tactics (e.g. `T1059 Command and Scripting Interpreter`, `T1486 Data Encrypted for Impact`).
 
 ---
 
-### 2. ✈️ Telegram Setup (Channels, Groups, & DMs)
+## 🧪 Automated Testing
 
-| Step | Action |
-|---|---|
-| 1 | Message `@BotFather` on Telegram → send `/newbot` → follow prompts to get your **Bot Token** |
-| 2 | Add your bot to the Telegram Group or Channel and promote it to **Admin** |
-| 3 | Send a test message in the channel, then run `npm run list-telegram-chats` to find your Chat ID |
-| 4 | Add token and chat ID to `.env` |
-
-```env
-TELEGRAM_BOT_TOKEN=123456789:ABCDefgh...
-TELEGRAM_TARGET=@mycybernewschannel        # public channel
-TELEGRAM_TARGET=-1001234567890             # private group ID
-TELEGRAM_TARGET=@channel1,-1001234567890  # multi-target
-```
-
----
-
-### 3. 🎮 Discord Setup (Server Channels)
-
-| Step | Action |
-|---|---|
-| 1 | Open Discord → Go to your Server → Right-click target channel → **Edit Channel** |
-| 2 | Click **Integrations** → **Webhooks** → **New Webhook** |
-| 3 | Name the webhook `📰 News Feeder Bot` → click **Copy Webhook URL** |
-| 4 | Paste into `.env` — no bot token or invite process needed! |
-
-```env
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456/xxxxx
-DISCORD_USERNAME=📰 News Feeder Bot     # optional custom display name
-DISCORD_AVATAR_URL=https://...          # optional custom avatar
-```
-*Articles appear as **rich embeds**: blue for normal news, red for critical alerts.*
-
----
-
-### 4. 🟢 Google Chat Space Setup (Workspace & Hangouts Spaces)
-
-| Step | Action |
-|---|---|
-| 1 | Open [Google Chat](https://chat.google.com) → Navigate to your target **Chat Space** |
-| 2 | Click the Space Name dropdown at the top → Select **Apps & integrations** |
-| 3 | Click **Manage Webhooks** (or **Add Webhook**) |
-| 4 | Set Name to `📰 News Feeder Bot` → Click **Save** → **Copy Link** |
-| 5 | Paste the Webhook URL into `.env` |
-
-```env
-GOOGLE_CHAT_WEBHOOK_URL=https://chat.googleapis.com/v1/spaces/AAAAxxxx/messages?key=yyyy&token=zzzz
-```
-*Articles appear as **Google Chat Cards v2** with summary text and interactive "Read Full Article 📖" action buttons.*
-
----
-
-### 5. 💼 Slack Setup (Channels & Workspace Rooms)
-
-| Step | Action |
-|---|---|
-| 1 | Go to [api.slack.com/apps](https://api.slack.com/apps) → Click **Create New App** → **From scratch** |
-| 2 | Name it `News Feeder Bot` → select your Slack Workspace |
-| 3 | Click **Incoming Webhooks** → toggle *Activate Incoming Webhooks* to **On** |
-| 4 | Click **Add New Webhook to Workspace** → select target channel → Click **Allow** |
-| 5 | Copy the Webhook URL and paste into `.env` |
-
-```env
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T00/B00/XXXXX
-```
-*Articles appear formatted with **Slack Block Kit** headers, markdown text, and action buttons.*
-
----
-
-### 6. 🏢 Microsoft Teams Setup (Team Channels)
-
-| Step | Action |
-|---|---|
-| 1 | Open Microsoft Teams → Go to your Team → Click **...** next to your target channel |
-| 2 | Select **Connectors** (or **Workflows** / **Integrations**) |
-| 3 | Find **Incoming Webhook** → Click **Configure** / **Add** |
-| 4 | Provide Name `News Feeder Bot` → Click **Create** → Copy the Webhook URL |
-| 5 | Paste into `.env` |
-
-```env
-TEAMS_WEBHOOK_URL=https://outlook.office.com/webhook/xxxx@yyyy/IncomingWebhook/zzzz
-```
-*Articles appear as **Microsoft Teams Adaptive Cards 1.2** with bold titles, category tags, and action buttons.*
-
----
-
-## ⚙️ Configuration
-
-All features are controlled from `config.json`. Changes take effect on the next pipeline run — **no restart needed**.
-
-### `config.json` — Full Reference
-
-#### 📡 News Sources
-```json
-"sources": [
-  {
-    "name":     "The Hacker News",
-    "url":      "https://thehackernews.com/",
-    "rss":      "https://feeds.feedburner.com/TheHackersNews",
-    "category": "💻 The Hacker News",
-    "enabled":  true
-  }
-]
-```
-Add more sources interactively: `npm run add-source`
-
-#### ⚙️ General Settings
-```json
-"settings": {
-  "pollIntervalMinutes":    5,   // how often to check for new articles
-  "maxArticlesPerRun":      5,   // max articles per polling cycle
-  "summaryBulletPoints":    3,   // AI bullet points per article
-  "delayBetweenMessagesSec":3,   // pause between sends (avoid spam limits)
-  "healthCheckHour":        8,   // send "I'm alive" ping at 8:00 AM
-  "dashboardPort":       3000    // web dashboard port
-}
-```
-
-#### 🎯 Keyword Filtering
-```json
-"filters": {
-  "enabled":  true,
-  "keywords": ["ransomware", "zero-day", "CVE", "data breach", "RCE"],
-  "mode":     "include"
-}
-```
-- `"include"` — only deliver articles that match at least one keyword
-- `"exclude"` — skip articles that match any keyword
-
-#### 🚨 Severity Alerts
-```json
-"severity": {
-  "enabled":  true,
-  "keywords": ["zero-day", "critical", "RCE", "ransomware", "actively exploited",
-               "authentication bypass", "supply chain attack", "backdoor"]
-}
-```
-Matching articles get a `🚨 CRITICAL ALERT` banner at the top of the message.
-
-#### 📋 Daily Digest Mode
-```json
-"digest": {
-  "enabled": true,
-  "sendAt":  "08:00"
-}
-```
-Instead of per-article messages, all articles are buffered and sent as one digest at `sendAt`. Keeps groups clean.
-
-#### 🔀 Source Routing
-```json
-"routing": {
-  "BleepingComputer":  ["whatsapp"],
-  "The Hacker News":   ["telegram", "discord"],
-  "HackRead":          ["whatsapp", "telegram", "discord"]
-}
-```
-Route sources to specific platforms. Sources not listed broadcast to all.
-
-#### ⚖️ Article Scoring
-```json
-"scoring": {
-  "enabled":  true,
-  "minScore": 0.3
-}
-```
-Each article is scored 0.0–1.0 based on keyword relevance, recency, and content richness. Articles below `minScore` are silently skipped.
-
----
-
-## 🚀 Deployment
-
-### Option 1 — Local (Direct Node.js)
+Run the native test suite covering all modules:
 ```bash
-npm start              # run once
-npm run dev            # auto-restart on file changes (development)
+npm test
 ```
-
-### Option 2 — Local 24/7 with PM2 *(recommended for always-on PC/VPS)*
-```bash
-npm install -g pm2
-npm run pm2:start      # start in background
-pm2 save               # persist across reboots
-pm2 startup            # configure system auto-start
-```
-
-### Option 3 — Docker *(isolated container)*
-```bash
-cp .env.example .env   # fill in your credentials
-npm run docker:up      # build + start in background
-npm run docker:logs    # follow logs
-```
-WhatsApp session and article data are stored in named Docker volumes — survive container rebuilds.
-
-### Option 4 — Railway.app *(easiest cloud)*
-1. Push this repo to GitHub
-2. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub
-3. Add environment variables in the **Variables** tab
-4. Railway auto-detects `railway.json` and deploys via Dockerfile
-
-### Option 5 — Render.com *(free tier)*
-1. Go to [render.com](https://render.com) → New → Blueprint
-2. Connect your GitHub repo (`render.yaml` is auto-detected)
-3. Add secrets in the **Environment** tab
-4. Free tier: Telegram + Discord work perfectly (no persistent disk needed)
-
-### Option 6 — Fly.io *(best free cloud — 3 always-on VMs)*
-```bash
-npm install -g flyctl
-fly auth login
-fly launch --no-deploy
-fly volumes create newsbot_data --size 1 --region sin
-fly secrets set GROQ_API_KEY=xxx TELEGRAM_BOT_TOKEN=xxx TELEGRAM_TARGET=@channel
-fly deploy
-```
-
-### Option 7 — Oracle Cloud Always Free *(4 ARM VMs, forever free)*
-Full guide: [DEPLOYMENT.md](DEPLOYMENT.md#7-️-oracle-cloud-free-tier-always-free-vps)
-
-> 📖 **Complete step-by-step instructions for all 8 deployment options** → see [DEPLOYMENT.md](DEPLOYMENT.md)
-
----
-
-## 🗂️ Project Structure
-
-```
-news-feeder-bot/
-│
-├── index.js                    # Entry point — boots platforms, runs cron jobs
-├── config.json                 # All feature configuration (hot-reloaded)
-├── .env                        # Your secrets — never commit this!
-├── .env.example                # Template with all available variables
-│
-├── src/
-│   ├── pipeline.js             # Orchestrates: fetch → filter → score → summarize → send
-│   ├── fetcher.js              # RSS fetcher with ETag/Last-Modified caching
-│   ├── summarizer.js           # Multi-provider AI (Groq/Ollama/HF/OpenRouter/Gemini/Extractive)
-│   ├── scorer.js               # Article importance scoring (0.0–1.0)
-│   ├── formatter.js            # Message formatting for WhatsApp, Telegram, Discord
-│   ├── sender.js               # WhatsApp client (cross-platform Chrome detection)
-│   ├── telegram-sender.js      # Telegram Bot API (native fetch, zero deps)
-│   ├── discord-sender.js       # Discord webhooks (rich embeds, native fetch)
-│   ├── deduplicator.js         # Seen-article tracking with debounced disk writes
-│   ├── web-dashboard.js        # Dashboard + /health + /metrics endpoints
-│   └── logger.js               # Colored console + daily rotating log files
-│
-├── scripts/
-│   └── scan.js                 # Static security scanner (pattern-based code audit)
-│
-├── add-source.js               # Interactive CLI to add RSS sources
-├── list-groups.js              # WhatsApp group ID finder
-├── list-telegram-chats.js      # Telegram chat ID finder
-│
-├── Dockerfile                  # Multi-stage production Docker image
-├── docker-compose.yml          # Local Docker with volumes + resource limits
-├── ecosystem.config.js         # PM2 process manager configuration
-├── railway.json                # Railway.app deployment config
-├── render.yaml                 # Render.com blueprint
-├── fly.toml                    # Fly.io deployment config
-├── .github/workflows/ci.yml    # GitHub Actions CI (audit + module checks)
-├── DEPLOYMENT.md               # Complete deployment guide for all platforms
-└── .env.example                # All environment variables documented
-```
-
----
-
-## 📰 Default News Sources
-
-| Source | Category | Feed |
-|---|---|---|
-| Cyber Security News | 🔐 Cybersecurity | `cybersecuritynews.com/feed` |
-| HackRead | 🕵️ HackRead | `hackread.com/feed` |
-| The Hacker News | 💻 The Hacker News | `feeds.feedburner.com/TheHackersNews` |
-| BleepingComputer | 🖥️ BleepingComputer | `bleepingcomputer.com/feed` |
-
-Add your own: `npm run add-source`
-
----
-
-## 📊 Web Dashboard
-
-Automatically starts at **http://localhost:3000** when the bot runs.
-
-| Page | URL | Description |
-|---|---|---|
-| Dashboard | `/` | Dark-mode UI with stats, recent articles, live log tail |
-| Health Check | `/health` | JSON status — used by cloud platform health checks |
-| Metrics | `/metrics` | JSON with memory, uptime, recent articles |
-
-```json
-// GET /health
-{ "status": "ok", "uptime_sec": 3600, "total_sent": 142, "environment": "production" }
-```
-
-- Auto-refreshes every 30 seconds
-- Binds to `127.0.0.1` locally (not public), `0.0.0.0` in production
-- Port controlled by `PORT` env var (cloud) or `config.settings.dashboardPort` (local)
-
----
-
-## 🤖 AI Summarization
-
-Choose your provider by setting `SUMMARIZER_PROVIDER` in `.env`. The bot auto-falls back to extractive summarization if the API fails — articles always get delivered.
-
-### Provider Comparison
-
-| Provider | Cost | Free Limit | Quality | Setup |
-|---|---|---|---|---|
-| **Groq** *(default)* | 🆓 Free | 14,400 req/day | ⭐⭐⭐⭐ | API key — no CC needed |
-| **Ollama** | 🆓 Forever free | Unlimited | ⭐⭐⭐⭐ | Install app locally |
-| **HuggingFace** | 🆓 Free tier | Rate-limited | ⭐⭐⭐⭐⭐ | API key — free account |
-| **OpenRouter** | 🆓 Free tier | Varies by model | ⭐⭐⭐⭐ | API key — free account |
-| **Gemini** | 🆓 Free tier | 1,500 req/day | ⭐⭐⭐⭐ | API key — free account |
-| **Extractive** | 🆓 Zero cost | Unlimited | ⭐⭐⭐ | Nothing needed |
-
-### Setup by Provider
-
-#### 🟢 Groq (Recommended — 14,400 free req/day, no credit card)
-```env
-SUMMARIZER_PROVIDER=groq
-GROQ_API_KEY=gsk_xxxx
-GROQ_MODEL=llama-3.1-8b-instant   # or: llama-3.3-70b-versatile, mixtral-8x7b-32768
-```
-Get free key: [console.groq.com](https://console.groq.com)
-
-#### 🏠 Ollama (Local — private, unlimited, no API key)
-```bash
-# Install from https://ollama.com, then:
-ollama pull llama3.2
-```
-```env
-SUMMARIZER_PROVIDER=ollama
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.2   # or: mistral, phi3, gemma2
-```
-
-#### 🤗 HuggingFace (Best model quality for summarization)
-```env
-SUMMARIZER_PROVIDER=huggingface
-HF_API_KEY=hf_xxxx
-HF_MODEL=facebook/bart-large-cnn   # purpose-built summarization model
-```
-Get free token: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-
-#### 🔀 OpenRouter (100+ free models via one API)
-```env
-SUMMARIZER_PROVIDER=openrouter
-OPENROUTER_API_KEY=sk-or-xxxx
-OPENROUTER_MODEL=meta-llama/llama-3.1-8b-instruct:free
-```
-Get free key: [openrouter.ai](https://openrouter.ai)
-
-#### 💎 Gemini (Original provider)
-```env
-SUMMARIZER_PROVIDER=gemini
-GEMINI_API_KEY=AIza_xxxx
-```
-Get free key: [aistudio.google.com](https://aistudio.google.com)
-
-#### 📄 Extractive (No AI — always works)
-```env
-SUMMARIZER_PROVIDER=extractive
-# No key needed — extracts top sentences from the article directly
-```
-
-> **Cache:** All providers share `data/summary_cache.json` — summaries survive restarts and never repeat API calls for the same article.
-> **Auto-fallback:** If your provider is unavailable, the bot silently falls back to extractive so articles always get sent. Each message shows `🤖 AI summary` or `📄 auto-extracted`.
+**34/34 passing test cases** covering threat intel, RAG vector retrieval, translation caching, formatters, and administrative APIs.
 
 ---
 
 ## 🔒 Security
 
-| Area | Implementation |
-|---|---|
-| SSRF | All RSS/article URLs validated — private IPs and non-HTTP schemes blocked |
-| Prompt injection | RSS content isolated with XML delimiters in all AI provider prompts |
-| HTML injection | All external text HTML-escaped before Telegram messages |
-| XSS | Article URLs validated to `http`/`https` only before embedding |
-| WhatsApp injection | Markdown special chars (`*`, `_`, `~`, `` ` ``) escaped in all text |
-| Error sanitization | Stack traces, API tokens, and file paths never logged |
-| File permissions | Sensitive data files written with `mode 0o600` |
-| Docker | Runs as non-root user (`botuser`) inside container |
-| Supply chain | `package-lock.json` committed; `npm audit` = **0 vulnerabilities** (232 packages) |
-| CI | GitHub Actions runs `npm audit --audit-level=high` on every push |
-| Static scan | `scripts/scan.js` checks all source files for eval, prototype pollution, hardcoded keys |
-
----
-
-## 📦 npm Commands
-
-### Core
-| Command | Description |
-|---|---|
-| `npm start` | Start the bot |
-| `npm run dev` | Start with auto-restart on file changes |
-| `npm run add-source` | Add a new RSS source interactively |
-| `npm run list-groups` | List WhatsApp groups and their IDs |
-| `npm run list-telegram-chats` | List Telegram chats the bot has access to |
-| `npm run audit` | Run `npm audit` to check for vulnerabilities |
-
-### PM2 (VPS / always-on)
-| Command | Description |
-|---|---|
-| `npm run pm2:start` | Start with PM2 in production mode |
-| `npm run pm2:stop` | Stop |
-| `npm run pm2:restart` | Restart without downtime |
-| `npm run pm2:reload` | Zero-downtime reload |
-| `npm run pm2:logs` | Follow live logs |
-| `npm run pm2:monit` | CPU and memory monitor |
-| `npm run pm2:delete` | Remove from PM2 |
-
-### Docker
-| Command | Description |
-|---|---|
-| `npm run docker:build` | Build the Docker image |
-| `npm run docker:up` | Build and start in background |
-| `npm run docker:down` | Stop and remove containers |
-| `npm run docker:logs` | Follow container logs |
-| `npm run docker:restart` | Restart containers |
-
----
-
-## 📝 Log Files
-
-| Property | Value |
-|---|---|
-| Location | `data/logs/bot-YYYY-MM-DD.log` |
-| Rotation | New file daily, 7 days retained automatically |
-| Format | `[ISO timestamp] [LEVEL  ] message` |
-| Dashboard | Last 80 lines shown with colour coding |
-
----
-
-## ❓ Troubleshooting
-
-| Problem | Solution |
-|---|---|
-| WhatsApp QR keeps reappearing | Delete `.wwebjs_auth/` and restart to get a fresh QR |
-| Chrome not found | Install Google Chrome, or set `CHROME_PATH=/path/to/chrome` in `.env` |
-| AI provider 429 / quota errors | Bot retries automatically. Switch provider: `SUMMARIZER_PROVIDER=groq` or `=extractive` |
-| Ollama not responding | Make sure Ollama is running: `ollama serve` — then retry |
-| HuggingFace model loading slow | Free tier cold-starts can take 20–30s — bot waits and retries automatically |
-| Telegram "chat not found" | Run `npm run list-telegram-chats` to find the correct ID |
-| Discord articles not sending | Verify `DISCORD_WEBHOOK_URL` in `.env`; regenerate webhook if needed |
-| "No platform configured" | Set at least one: `WHATSAPP_TARGET`, `TELEGRAM_BOT_TOKEN`, or `DISCORD_WEBHOOK_URL` |
-| Dashboard port in use | Change `dashboardPort` in `config.json` or set `PORT` env var |
-| Docker out of memory | Increase `memory: 600M` → `900M` in `docker-compose.yml` |
-| WhatsApp on cloud (QR scan) | See [DEPLOYMENT.md — WhatsApp on Cloud](DEPLOYMENT.md#-whatsapp-on-cloud-deployments) |
-| dotenv log at startup | Normal in v17 — suppressed automatically with `{ quiet: true }` |
+- **0 npm audit vulnerabilities**
+- **SSRF Protection**: Internal IP blocking (`127.0.0.1`, `169.254.169.254`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`)
+- **Sanitized Input**: Control character stripping and HTML escaping across all senders
 
 ---
 
 ## 📄 License
-
-MIT — free to use, modify, and distribute.
-
----
-
-<div align="center">
-
-**[⭐ Star this repo](https://github.com/cyberlog69/news-feeder-bot)** if it's useful · **[🐛 Report a bug](https://github.com/cyberlog69/news-feeder-bot/issues)** · **[💡 Request a feature](https://github.com/cyberlog69/news-feeder-bot/issues)**
-
-</div>
+[MIT License](LICENSE) © 2026 CyberLog
