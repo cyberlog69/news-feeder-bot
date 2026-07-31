@@ -26,6 +26,7 @@
 - [Multi-Language & Internationalization](#-multi-language--internationalization)
 - [Audio & Multimedia Delivery](#-audio--multimedia-delivery)
 - [Platform Setup Guides](#-platform-setup-guides)
+- [Deployment Guides](#-deployment-guides)
 - [Web Dashboard & Admin Manager](#-web-dashboard--admin-manager)
 - [Automated Unit Testing](#-automated-testing)
 - [Security](#-security)
@@ -52,7 +53,7 @@
 |---|---|---|
 | 🤖 **AI & RAG** | **Conversational RAG** | Ask questions (`/ask`) over historical news using vector retrieval & AI synthesis |
 | | **Multi-Provider AI** | Auto-cascading AI support (`Groq` → `Gemini` → `OpenRouter` → `HuggingFace` → `Ollama`) |
-| 🛡️ **Security** | **Threat Intel Engine** | CVE, EPSS exploit probability, IOC parsing (IPs/hashes), MITRE ATT&CK mapping |
+| 🛡️ **Security** | **Threat Intel Engine** | CVE, EPSS exploit probability, IOC parsing (IPs/hashes), MITRE ATT&CK technique IDs |
 | 🔊 **Media** | **TTS Voice Summaries** | Formats spoken narrative scripts and generates `.mp3` audio files |
 | | **Telegram Voice Notes** | Dispatches playable voice summaries directly to Telegram chats |
 | | **SVG Alert Cards** | Generates visual social alert graphics for `🚨 CRITICAL ALERT` articles |
@@ -139,11 +140,6 @@ WHATSAPP_LANGUAGE=hi
 DEFAULT_LANGUAGE=en
 ```
 
-### Key Capabilities
-- Supports **13+ ISO language codes** (`en`, `es`, `de`, `fr`, `hi`, `ja`, `pt`, `zh`, `ru`, `it`, `nl`, `tr`, `pl`).
-- SQLite translation caching (`translation_cache` table) prevents redundant API calls.
-- AI translation engine uses active AI provider or free REST fallback.
-
 ---
 
 ## 🔊 Audio & Multimedia Delivery
@@ -185,6 +181,75 @@ DEFAULT_LANGUAGE=en
 
 ### 9. Outbound Webhooks (SOAR/SIEM)
 1. Set `OUTBOUND_WEBHOOK_URL` to your n8n, Zapier, Splunk, or Shuffle endpoint.
+
+---
+
+## 🌐 Deployment Guides
+
+### Option 1: Docker & Docker Compose (Recommended)
+The repository includes a production-ready `Dockerfile` and `docker-compose.yml` pre-configured with Chromium for Headless WhatsApp support.
+
+```bash
+# 1. Clone & create .env
+cp .env.example .env
+
+# 2. Build & launch in detached mode
+docker-compose up -d --build
+
+# 3. View live logs & QR code
+docker-compose logs -f
+```
+
+### Option 2: Cloud Deployment (Railway / Render / Fly.io)
+1. Fork or push your repository to GitHub.
+2. Create a new service on Railway, Render, or Fly.io connected to your repository.
+3. Configure the following Environment Variables in your cloud dashboard:
+   - `NODE_ENV=production`
+   - `GROQ_API_KEY=your_key`
+   - `TELEGRAM_BOT_TOKEN=your_token`
+   - `DASHBOARD_TOKEN=your_secret_admin_token`
+4. Deploy — the platform automatically detects `PORT` and exposes `/health` for health checks!
+
+### Option 3: Linux VPS (Ubuntu/Debian Systemd Service)
+Run News Feeder Bot as a persistent system daemon on any Linux VPS:
+
+```bash
+# 1. Install Node.js 22 LTS
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs chromium-browser
+
+# 2. Create Systemd Service File
+sudo nano /etc/systemd/system/news-feeder-bot.service
+```
+
+Paste the following systemd configuration:
+```ini
+[Unit]
+Description=News Feeder Bot Service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/news-feeder-bot
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# 3. Enable & start service
+sudo systemctl daemon-reload
+sudo systemctl enable news-feeder-bot
+sudo systemctl start news-feeder-bot
+
+# Check status
+sudo systemctl status news-feeder-bot
+```
 
 ---
 
