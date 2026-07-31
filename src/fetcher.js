@@ -60,13 +60,20 @@ const parser = new Parser({
   }
 });
 
+// Stores feed health stats: { name, url, status, lastFetch, latencyMs, errorCount, articleCount }
+const feedHealthMap = new Map();
+
 /**
  * Fetch the latest articles from a single RSS source.
  * Uses conditional requests (ETag/Last-Modified) to skip unchanged feeds.
  */
 async function fetchSource(source) {
-  if (!isSafeUrl(source.rss)) {
+  const startTime = Date.now();
+  const rssUrl = source.rss;
+
+  if (!isSafeUrl(rssUrl)) {
     logger.warn(`Skipping source "${source.name}": invalid or unsafe RSS URL`);
+    recordFeedHealth(source.name, rssUrl, 'Invalid URL', 0, Date.now() - startTime, 0);
     return [];
   }
 
@@ -74,7 +81,7 @@ async function fetchSource(source) {
     logger.info(`Fetching: ${source.name}`);
 
     // Build conditional request headers
-    const cached    = etagCache.get(source.rss);
+    const cached    = etagCache.get(rssUrl);
     const reqHeaders = { 'User-Agent': USER_AGENT };
     if (cached?.etag)         reqHeaders['If-None-Match']     = cached.etag;
     if (cached?.lastModified) reqHeaders['If-Modified-Since'] = cached.lastModified;
@@ -84,19 +91,23 @@ async function fetchSource(source) {
     const timer      = setTimeout(() => controller.abort(), 15000);
     let res;
     try {
-      res = await fetch(source.rss, { headers: reqHeaders, signal: controller.signal });
+      res = await fetch(rssUrl, { headers: reqHeaders, signal: controller.signal });
     } finally {
       clearTimeout(timer);
     }
 
+    const latencyMs = Date.now() - startTime;
+
     // 304 Not Modified — feed hasn't changed, use cached articles
     if (res.status === 304 && cached?.articles?.length > 0) {
       logger.info(`  ${source.name}: not modified (served from cache)`);
+      recordFeedHealth(source.name, rssUrl, 304, cached.articles.length, latencyMs, 0);
       return cached.articles;
     }
 
     if (!res.ok) {
       logger.error(`Failed to fetch ${source.name}: HTTP ${res.status}`);
+      recordFeedHealth(source.name, rssUrl, res.status, 0, latencyMs, 1);
       return cached?.articles || [];
     }
 
@@ -125,20 +136,39 @@ async function fetchSource(source) {
     }).filter((a) => a.url);
 
     // Update ETag cache for next request
-    etagCache.set(source.rss, {
+    etagCache.set(rssUrl, {
       etag:         res.headers.get('etag')          || null,
       lastModified: res.headers.get('last-modified') || null,
       articles
     });
 
+    recordFeedHealth(source.name, rssUrl, 200, articles.length, latencyMs, 0);
     return articles;
 
   } catch (err) {
-    // On error, return whatever we cached last so the bot keeps working
-    const cached = etagCache.get(source.rss);
+    const latencyMs = Date.now() - startTime;
+    const cached = etagCache.get(rssUrl);
     logger.error(`Failed to fetch ${source.name}: ${err.message.split('\n')[0]}`);
+    recordFeedHealth(source.name, rssUrl, 'Error', cached?.articles?.length || 0, latencyMs, 1);
     return cached?.articles || [];
   }
+}
+
+function recordFeedHealth(name, rss, status, articleCount, latencyMs, errIncrement = 0) {
+  const existing = feedHealthMap.get(rss) || { errorCount: 0 };
+  feedHealthMap.set(rss, {
+    name,
+    rss,
+    status,
+    articleCount,
+    latencyMs,
+    errorCount: existing.errorCount + errIncrement,
+    lastFetch: new Date().toISOString()
+  });
+}
+
+function getFeedHealth() {
+  return Array.from(feedHealthMap.values());
 }
 
 /**
@@ -191,4 +221,4 @@ function cleanText(str) {
     .trim();
 }
 
-module.exports = { fetchAllSources, getFullArticleText, isSafeUrl };
+module.exports = { fetchAllSources, getFullArticleText, isSafeUrl, getFeedHealth };

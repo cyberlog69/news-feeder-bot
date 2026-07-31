@@ -400,6 +400,141 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       return;
     }
 
+    // ── Feed Health API ────────────────────────────────────────────────
+    if (url === '/api/feed-health' && req.method === 'GET') {
+      const { getFeedHealth } = require('./fetcher');
+      res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+      res.end(JSON.stringify(getFeedHealth()));
+      return;
+    }
+
+    // ── Sources API ────────────────────────────────────────────────────
+    if (url === '/api/sources' && req.method === 'GET') {
+      const config = pipeline.config || {};
+      const { getFeedHealth } = require('./fetcher');
+      const healthMap = new Map(getFeedHealth().map((h) => [h.rss, h]));
+
+      const sources = (config.sources || []).map((s) => ({
+        ...s,
+        health: healthMap.get(s.rss) || null
+      }));
+
+      res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+      res.end(JSON.stringify(sources));
+      return;
+    }
+
+    // ── Toggle Source ──────────────────────────────────────────────────
+    if (url === '/api/sources/toggle' && req.method === 'POST') {
+      if (!isTokenValid(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: 'Unauthorized: invalid or missing Dashboard Token' }));
+        return;
+      }
+
+      let bodyText = '';
+      req.on('data', (chunk) => { bodyText += chunk; });
+      req.on('end', () => {
+        try {
+          const { name, enabled } = JSON.parse(bodyText);
+          const configPath = path.join(process.cwd(), 'config.json');
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
+          const target = (config.sources || []).find((s) => s.name === name);
+          if (!target) {
+            res.writeHead(444, { 'Content-Type': 'application/json', ...secureHeaders() });
+            res.end(JSON.stringify({ error: 'Source not found' }));
+            return;
+          }
+
+          target.enabled = Boolean(enabled);
+          fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+          if (pipeline.config) pipeline.config.sources = config.sources;
+
+          res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ message: `Source "${name}" updated`, enabled: target.enabled }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // ── Add Source ─────────────────────────────────────────────────────
+    if (url === '/api/sources/add' && req.method === 'POST') {
+      if (!isTokenValid(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: 'Unauthorized: invalid or missing Dashboard Token' }));
+        return;
+      }
+
+      let bodyText = '';
+      req.on('data', (chunk) => { bodyText += chunk; });
+      req.on('end', () => {
+        try {
+          const { name, rss, category } = JSON.parse(bodyText);
+          const { isSafeUrl } = require('./fetcher');
+          if (!name || !rss || !isSafeUrl(rss)) {
+            res.writeHead(400, { 'Content-Type': 'application/json', ...secureHeaders() });
+            res.end(JSON.stringify({ error: 'Valid feed name and safe HTTP/HTTPS RSS URL are required.' }));
+            return;
+          }
+
+          const configPath = path.join(process.cwd(), 'config.json');
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
+          config.sources = config.sources || [];
+          config.sources.push({
+            name: name.trim(),
+            category: (category || 'Tech').trim(),
+            rss: rss.trim(),
+            enabled: true
+          });
+
+          fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+          if (pipeline.config) pipeline.config.sources = config.sources;
+
+          res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ message: `Source "${name}" added successfully` }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // ── Delete Source ──────────────────────────────────────────────────
+    if (url === '/api/sources/delete' && req.method === 'POST') {
+      if (!isTokenValid(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: 'Unauthorized: invalid or missing Dashboard Token' }));
+        return;
+      }
+
+      let bodyText = '';
+      req.on('data', (chunk) => { bodyText += chunk; });
+      req.on('end', () => {
+        try {
+          const { name } = JSON.parse(bodyText);
+          const configPath = path.join(process.cwd(), 'config.json');
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
+          config.sources = (config.sources || []).filter((s) => s.name !== name);
+          fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+          if (pipeline.config) pipeline.config.sources = config.sources;
+
+          res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ message: `Source "${name}" deleted` }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
     // ── Main dashboard ───────────────────────────────────────────────────
     if (url === '/' || url === '/dashboard') {
       try {
