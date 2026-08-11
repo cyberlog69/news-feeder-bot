@@ -37,17 +37,18 @@
 
 ---
 
-## 🆕 What's New in v3.7
+## 🆕 What's New in v3.8
 
 | Module | Details |
 |---|---|
+| 🏴‍☠️ **Live Ransomware & CISA KEV Tracker** | Ingests real-time victim disclosures from dark web ransomware leak portals (LockBit, RansomHub, BlackCat, Akira, Play). Syncs CISA's official *Known Exploited Vulnerabilities* (KEV) catalog with SQLite persistence and warning badges. |
 | 🧠 **RAG & Conversational AI (`/ask`)** | Ask natural language questions via `/ask <question>`. Searches historical news in SQLite using term-frequency vector embeddings and Cosine Similarity, generating cited AI responses. |
 | 🛡️ **Deep Threat Intelligence** | Auto-enriches security news with CVE details, FIRST.org EPSS exploit probabilities, IOC extraction (IPs, hashes, defanged domains), and MITRE ATT&CK mapping. |
 | 🌍 **Multi-Language Translation** | Translate news summaries on the fly per platform (`TELEGRAM_LANGUAGE=es`, `DISCORD_LANGUAGE=de`). Supports 13+ languages with SQLite translation caching. |
 | 🔊 **Audio & Multimedia** | Text-to-Speech narrative summaries, native **Telegram Voice Notes**, and dynamic SVG visual alert cards for critical zero-day news. |
 | 📧 **9 Delivery Channels** | WhatsApp, Telegram, Discord, Google Chat, Slack, MS Teams, HTML Email Newsletters, Mobile Push (Pushover/Ntfy.sh), and Outbound SOAR/SIEM Webhooks. |
 | 🎛️ **Feed Health & Admin UI** | RSS Feed Health Index tracking latency (ms), HTTP status, and error counts. Visual Feed Manager REST APIs (`/api/sources`) to add/toggle feeds without manual config edits. |
-| 🧪 **34/34 Unit Tests** | Automated Node.js native test suite (`npm test`) covering security, RAG, formatters, and administrative APIs with 100% pass rate. |
+| 🧪 **37/37 Unit Tests** | Automated Node.js native test suite (`npm test`) covering security, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
 
 ---
 
@@ -55,15 +56,17 @@
 
 | Category | Feature | Description |
 |---|---|---|
+| 🏴‍☠️ **Threat Intel** | **CISA KEV Sync** | Real-time lookup against CISA Known Exploited Vulnerabilities catalog with ransomware flags |
+| | **Ransomware Leak Tracker** | Real-time dark web leak portal tracking across major ransomware gangs with victim alerts |
 | 🤖 **AI & RAG** | **Conversational RAG** | Ask questions (`/ask`) over historical news using vector retrieval & AI synthesis |
 | | **Multi-Provider AI** | Auto-cascading AI support (`Groq` → `Gemini` → `OpenRouter` → `HuggingFace` → `Ollama`) |
-| 🛡️ **Security** | **Threat Intel Engine** | CVE, EPSS exploit probability, IOC parsing (IPs/hashes), MITRE ATT&CK technique IDs |
+| 🛡️ **Enrichment** | **Threat Intel Engine** | CVE, EPSS exploit probability, IOC parsing (IPs/hashes), MITRE ATT&CK technique IDs |
 | 🔊 **Media** | **TTS Voice Summaries** | Formats spoken narrative scripts and generates `.mp3` audio files |
 | | **Telegram Voice Notes** | Dispatches playable voice summaries directly to Telegram chats |
 | | **SVG Alert Cards** | Generates visual social alert graphics for `🚨 CRITICAL ALERT` articles |
 | 🌍 **Localization**| **Multi-Language Routing**| Translate news summaries per platform (`en`, `es`, `de`, `fr`, `hi`, `ja`, etc.) |
 | 📱 **Delivery** | **9 Platforms** | WhatsApp, Telegram, Discord, Google Chat, Slack, MS Teams, Email, Push, Webhook |
-| 🗄️ **Storage** | **Native SQLite** | Crash-proof SQLite storage (`data/newsbot.sqlite`) for cache and vector storage |
+| 🗄️ **Storage** | **Native SQLite** | Crash-proof SQLite storage (`data/newsbot.sqlite`) for cache, KEV catalog, and vector storage |
 | 📊 **Admin** | **Feed Health Matrix** | Live monitoring of response latency, HTTP status, and error counts per RSS feed |
 | | **Visual Feed Manager**| REST APIs (`/api/sources`) to add, toggle, or delete feeds with hot reloading |
 
