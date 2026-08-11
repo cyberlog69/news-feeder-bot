@@ -400,11 +400,95 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       return;
     }
 
-    // ── Feed Health API ────────────────────────────────────────────────
-    if (url === '/api/feed-health' && req.method === 'GET') {
+    // ── Threat Intel & SOC Radar API ─────────────────────────────────
+    if (url === '/api/threat-intel') {
+      try {
+        const { initDb } = require('./db');
+        const db = initDb();
+        const kevCount = db.prepare('SELECT count(*) as count FROM cisa_kev_cache').get().count;
+        const kevRansomwareCount = db.prepare('SELECT count(*) as count FROM cisa_kev_cache WHERE known_ransomware_use = 1').get().count;
+        const recentVictims = db.prepare('SELECT * FROM ransomware_victims ORDER BY created_at DESC LIMIT 15').all();
+        const recentKevs = db.prepare('SELECT * FROM cisa_kev_cache ORDER BY date_added DESC LIMIT 10').all();
+
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({
+          cisaKev: {
+            totalTracked: kevCount,
+            knownRansomwareUse: kevRansomwareCount,
+            recent: recentKevs
+          },
+          ransomwareVictims: {
+            totalTracked: db.prepare('SELECT count(*) as count FROM ransomware_victims').get().count,
+            recent: recentVictims
+          }
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    // ── Topic Subscriptions API ────────────────────────────────────────
+    if (url === '/api/subscriptions') {
+      try {
+        const { listSubscriptions } = require('./subscription-manager');
+        const subs = listSubscriptions();
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({
+          totalSubscriptions: subs.length,
+          subscriptions: subs
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    // ── System Status & Channels Matrix API ────────────────────────────
+    if (url === '/api/system-status') {
+      try {
+        const mem = process.memoryUsage();
+        const channels = {
+          whatsapp: Boolean(process.env.WHATSAPP_ENABLED !== 'false'),
+          telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+          discord: Boolean(process.env.DISCORD_WEBHOOK_URL),
+          googleChat: Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL),
+          slack: Boolean(process.env.SLACK_WEBHOOK_URL),
+          teams: Boolean(process.env.TEAMS_WEBHOOK_URL),
+          email: Boolean(process.env.SMTP_HOST || process.env.SENDGRID_API_KEY || process.env.RESEND_API_KEY),
+          push: Boolean(process.env.PUSHOVER_USER_KEY || process.env.NTFY_TOPIC),
+          webhook: Boolean(process.env.OUTBOUND_WEBHOOK_URL)
+        };
+
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({
+          status: 'healthy',
+          version: getVersion(),
+          uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
+          nodeVersion: process.version,
+          memory: {
+            rssMb: Math.round(mem.rss / 1024 / 1024),
+            heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024)
+          },
+          aiProvider: process.env.SUMMARIZER_PROVIDER || 'gemini',
+          activeChannels: Object.keys(channels).filter((k) => channels[k]).length,
+          channels
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    // ── Feed Health Index ──────────────────────────────────────────────
+    if (url === '/api/feed-health') {
       const { getFeedHealth } = require('./fetcher');
+      const healthData = getFeedHealth();
       res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
-      res.end(JSON.stringify(getFeedHealth()));
+      res.end(JSON.stringify(healthData));
       return;
     }
 
