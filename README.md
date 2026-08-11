@@ -37,10 +37,11 @@
 
 ---
 
-## 🆕 What's New in v3.12
+## 🆕 What's New in v3.13
 
 | Module | Details |
 |---|---|
+| 🌐 **Social & Public Syndication** | Broadcasts critical security alerts to Mastodon/Fediverse and Bluesky (AT Protocol). Exposes public syndication endpoints: RSS 2.0 (`/feed.xml`), Atom 1.0 (`/atom.xml`), and JSON Feed 1.1 (`/feed.json`). |
 | 📑 **Executive CISO Briefings** | Generates strategic CISO executive intelligence reports in Markdown and print/PDF-ready HTML summarizing active CISA KEV zero-days, dark web ransomware disclosures, and tactical recommendations via `/briefing` or `GET /api/ciso-briefing`. |
 | 📊 **Next-Gen SOC Dashboard & Radar** | Military-grade dark glassmorphism SOC console (`http://localhost:3000`) with Threat Telemetry HUD, live CISA KEV & Ransomware victim stream, and REST APIs (`/api/threat-intel`, `/api/subscriptions`, `/api/system-status`). |
 | 👥 **Subscription Topics (`/subscribe`)** | Interactive bot commands (`/subscribe ransomware, cve`, `/unsubscribe`, `/subscriptions`) allowing users, channels, and groups to filter news by specific keywords or categories with SQLite persistence. |
@@ -52,7 +53,7 @@
 | 🔊 **Audio & Multimedia** | Text-to-Speech narrative summaries, native **Telegram Voice Notes**, and dynamic SVG visual alert cards for critical zero-day news. |
 | 📧 **9 Delivery Channels** | WhatsApp, Telegram, Discord, Google Chat, Slack, MS Teams, HTML Email Newsletters, Mobile Push (Pushover/Ntfy.sh), and Outbound SOAR/SIEM Webhooks. |
 | 🎛️ **Feed Health & Admin UI** | RSS Feed Health Index tracking latency (ms), HTTP status, and error counts. Visual Feed Manager REST APIs (`/api/sources`) to add/toggle feeds without manual config edits. |
-| 🧪 **46/46 Unit Tests** | Automated Node.js native test suite (`npm test`) covering CISO Briefings, SOC Dashboard APIs, Subscriptions, Story Clustering, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
+| 🧪 **49/49 Unit Tests** | Automated Node.js native test suite (`npm test`) covering Social Media, Syndication Feeds, CISO Briefings, SOC Dashboard APIs, Subscriptions, Story Clustering, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
 
 ---
 
@@ -60,6 +61,8 @@
 
 | Category | Feature | Description |
 |---|---|---|
+| 🌐 **Public Feeds** | **Feed Syndication** | Auto-generates public RSS 2.0 (`/feed.xml`), Atom (`/atom.xml`), and JSON Feed (`/feed.json`) |
+| | **Social Broadcasting** | Broadcasts alerts to Mastodon/Fediverse and Bluesky (AT Protocol) |
 | 📑 **Reporting** | **CISO Executive Briefings**| Auto-compiles strategic threat reports in Markdown/PDF-ready HTML via `/briefing` |
 | 📊 **SOC Console**| **SOC Threat Telemetry** | Midnight glassmorphism dashboard with live KEV radar, ransomware stream & metrics HUD |
 | 👥 **Personalization**| **Topic Subscriptions** | Filter alerts per user or channel via `/subscribe` (e.g. `ransomware`, `cve`, `ai`) |
