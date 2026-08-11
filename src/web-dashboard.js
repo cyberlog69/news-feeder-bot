@@ -513,6 +513,34 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       return;
     }
 
+    // ── Public Syndication Feeds (RSS / Atom / JSON Feed) ─────────────
+    if (url === '/feed.xml' || url === '/rss.xml' || url === '/rss') {
+      const { generateRssXml } = require('./feed-generator');
+      const articles = pipeline.getRecentArticles(30);
+      const xml = generateRssXml(articles, `http://${req.headers.host || 'localhost:3000'}`);
+      res.writeHead(200, { 'Content-Type': 'application/rss+xml; charset=utf-8', ...secureHeaders() });
+      res.end(xml);
+      return;
+    }
+
+    if (url === '/atom.xml' || url === '/atom') {
+      const { generateAtomXml } = require('./feed-generator');
+      const articles = pipeline.getRecentArticles(30);
+      const xml = generateAtomXml(articles, `http://${req.headers.host || 'localhost:3000'}`);
+      res.writeHead(200, { 'Content-Type': 'application/atom+xml; charset=utf-8', ...secureHeaders() });
+      res.end(xml);
+      return;
+    }
+
+    if (url === '/feed.json') {
+      const { generateJsonFeed } = require('./feed-generator');
+      const articles = pipeline.getRecentArticles(30);
+      const jsonFeed = generateJsonFeed(articles, `http://${req.headers.host || 'localhost:3000'}`);
+      res.writeHead(200, { 'Content-Type': 'application/feed+json; charset=utf-8', ...secureHeaders() });
+      res.end(JSON.stringify(jsonFeed, null, 2));
+      return;
+    }
+
     // ── Sources API ────────────────────────────────────────────────────
     if (url === '/api/sources' && req.method === 'GET') {
       const config = pipeline.config || {};
