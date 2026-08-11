@@ -89,6 +89,15 @@ function initDb() {
         discovered_at TEXT,
         created_at TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        target_id TEXT,
+        platform TEXT,
+        topics TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        PRIMARY KEY (target_id, platform)
+      );
     `);
 
     // Migrate legacy JSON files if they exist
@@ -373,6 +382,50 @@ function markRansomwareVictimSeen(victimId, groupName, victimName, country, sect
   );
 }
 
+// ── Subscriptions Storage API ─────────────────────────────────────────────────
+
+function saveSubscription(targetId, platform, topics) {
+  if (!targetId || !platform) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO subscriptions (target_id, platform, topics, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const now = new Date().toISOString();
+  stmt.run(String(targetId).trim(), String(platform).toLowerCase().trim(), String(topics || 'all').trim(), now, now);
+}
+
+function getSubscription(targetId, platform) {
+  if (!targetId || !platform) return null;
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT target_id as targetId, platform, topics, created_at as createdAt, updated_at as updatedAt
+    FROM subscriptions
+    WHERE target_id = ? AND platform = ?
+  `);
+  const row = stmt.get(String(targetId).trim(), String(platform).toLowerCase().trim());
+  return row || null;
+}
+
+function getAllSubscriptions() {
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT target_id as targetId, platform, topics, created_at as createdAt, updated_at as updatedAt
+    FROM subscriptions
+    ORDER BY updated_at DESC
+  `);
+  return stmt.all();
+}
+
+function deleteSubscription(targetId, platform) {
+  if (!targetId || !platform) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    DELETE FROM subscriptions WHERE target_id = ? AND platform = ?
+  `);
+  stmt.run(String(targetId).trim(), String(platform).toLowerCase().trim());
+}
+
 module.exports = {
   initDb,
   isUrlSeen,
@@ -391,5 +444,9 @@ module.exports = {
   getCisaKev,
   setCisaKev,
   isRansomwareVictimSeen,
-  markRansomwareVictimSeen
+  markRansomwareVictimSeen,
+  saveSubscription,
+  getSubscription,
+  getAllSubscriptions,
+  deleteSubscription
 };

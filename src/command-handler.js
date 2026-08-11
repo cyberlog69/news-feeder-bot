@@ -4,17 +4,22 @@
 
 const { searchSeenArticles, getTotalSeenCount } = require('./db');
 const { answerQuestion } = require('./rag-engine');
+const { setSubscription, getUserSubscription, deleteUserSubscription } = require('./subscription-manager');
 
 /**
  * Handle incoming command text.
- * @param {string} text - Raw command string (e.g. "/search ransomware" or "/ask What zero-days were patched?")
+ * @param {string} text - Raw command string (e.g. "/search ransomware" or "/subscribe cve, ransomware")
  * @param {object} config - Application configuration object
  * @param {number} startTime - Bot boot timestamp
+ * @param {object} [senderInfo] - { targetId, platform }
  * @returns {Promise<string>} - Formatted response string
  */
-async function handleCommand(text, config, startTime) {
+async function handleCommand(text, config, startTime, senderInfo = {}) {
   const trimmed = String(text || '').trim();
   if (!trimmed.startsWith('/')) return null;
+
+  const targetId = senderInfo.targetId || 'default';
+  const platform = senderInfo.platform || 'general';
 
   const parts = trimmed.split(/\s+/);
   const command = parts[0].toLowerCase();
@@ -78,6 +83,39 @@ async function handleCommand(text, config, startTime) {
       return await answerQuestion(question);
     }
 
+    case '/subscribe': {
+      if (!args) {
+        const current = getUserSubscription(targetId, platform);
+        return `⚠️ Usage: \`/subscribe <topics>\` (e.g. \`/subscribe ransomware, cve, critical\` or \`/subscribe all\`)\n\nCurrent active topics: *${current.join(', ')}*`;
+      }
+      const cleanTopics = args.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 200).trim();
+      const updated = setSubscription(targetId, platform, cleanTopics);
+      return [
+        `✅ *Subscription Updated!*`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `🎯 *Active Topics:* ${updated.join(', ')}`,
+        `📡 You will only receive news matching these topics (or critical alerts).`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━`
+      ].join('\n');
+    }
+
+    case '/unsubscribe': {
+      deleteUserSubscription(targetId, platform);
+      return `✅ *Unsubscribed successfully.* You will now receive all news updates by default.`;
+    }
+
+    case '/subscriptions':
+    case '/mysubscriptions': {
+      const current = getUserSubscription(targetId, platform);
+      return [
+        `📋 *Your Active Subscriptions*`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        `🎯 *Configured Topics:* ${current.join(', ')}`,
+        `💡 Use \`/subscribe <topics>\` to update your preferences or \`/unsubscribe\` to reset.`,
+        `━━━━━━━━━━━━━━━━━━━━━━━━━`
+      ].join('\n');
+    }
+
     case '/help':
     default: {
       return [
@@ -87,6 +125,9 @@ async function handleCommand(text, config, startTime) {
         '• `/sources` - List all active RSS news feeds',
         '• `/search <keyword>` - Search recent articles by topic',
         '• `/ask <question>` - Ask AI conversational questions about your news',
+        '• `/subscribe <topics>` - Subscribe to specific topics (e.g. ransomware, cve, critical)',
+        '• `/unsubscribe` - Reset topic filters to receive all news',
+        '• `/subscriptions` - View your active subscription topics',
         '• `/help` - Show this command reference',
         '━━━━━━━━━━━━━━━━━━━━━━━━━'
       ].join('\n');
