@@ -37,10 +37,11 @@
 
 ---
 
-## 🆕 What's New in v3.10
+## 🆕 What's New in v3.11
 
 | Module | Details |
 |---|---|
+| 📊 **Next-Gen SOC Dashboard & Radar** | Military-grade dark glassmorphism SOC console (`http://localhost:3000`) with Threat Telemetry HUD, live CISA KEV & Ransomware victim stream, and REST APIs (`/api/threat-intel`, `/api/subscriptions`, `/api/system-status`). |
 | 👥 **Subscription Topics (`/subscribe`)** | Interactive bot commands (`/subscribe ransomware, cve`, `/unsubscribe`, `/subscriptions`) allowing users, channels, and groups to filter news by specific keywords or categories with SQLite persistence. |
 | 📰 **AI Story Clustering & Master Bulletins** | Automatically identifies overlapping breaking news coverage across multiple feeds using Cosine Similarity on term-frequency vectors and shared CVEs. Merges facts into a single consolidated **Master Bulletin** citing all sources. |
 | 🏴‍☠️ **Live Ransomware & CISA KEV Tracker** | Ingests real-time victim disclosures from dark web ransomware leak portals (LockBit, RansomHub, BlackCat, Akira, Play). Syncs CISA's official *Known Exploited Vulnerabilities* (KEV) catalog with SQLite persistence and warning badges. |
@@ -50,7 +51,7 @@
 | 🔊 **Audio & Multimedia** | Text-to-Speech narrative summaries, native **Telegram Voice Notes**, and dynamic SVG visual alert cards for critical zero-day news. |
 | 📧 **9 Delivery Channels** | WhatsApp, Telegram, Discord, Google Chat, Slack, MS Teams, HTML Email Newsletters, Mobile Push (Pushover/Ntfy.sh), and Outbound SOAR/SIEM Webhooks. |
 | 🎛️ **Feed Health & Admin UI** | RSS Feed Health Index tracking latency (ms), HTTP status, and error counts. Visual Feed Manager REST APIs (`/api/sources`) to add/toggle feeds without manual config edits. |
-| 🧪 **42/42 Unit Tests** | Automated Node.js native test suite (`npm test`) covering Subscriptions, Story Clustering, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
+| 🧪 **43/43 Unit Tests** | Automated Node.js native test suite (`npm test`) covering SOC Dashboard APIs, Subscriptions, Story Clustering, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
 
 ---
 
@@ -58,6 +59,7 @@
 
 | Category | Feature | Description |
 |---|---|---|
+| 📊 **SOC Console**| **SOC Threat Telemetry** | Midnight glassmorphism dashboard with live KEV radar, ransomware stream & metrics HUD |
 | 👥 **Personalization**| **Topic Subscriptions** | Filter alerts per user or channel via `/subscribe` (e.g. `ransomware`, `cve`, `ai`) |
 | 📰 **Fusion** | **Story Clustering** | Groups overlapping news coverage using Cosine Similarity & shared CVE IDs |
 | | **Master Bulletins** | Consolidates multi-source breaking news into 1 all-in-one bulletin with multi-citations |
