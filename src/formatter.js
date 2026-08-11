@@ -119,6 +119,10 @@ function formatArticle(article, summary, aiUsed = true, severityKeywords = [], t
     lines.push(`🚨 *CRITICAL ALERT* 🚨`);
   }
 
+  if (article.isMasterBulletin && article.sources && article.sources.length > 1) {
+    lines.push(`📰 *MASTER BULLETIN* — Coverage from *${article.sources.length} Sources*`);
+  }
+
   lines.push(
     `${category}  |  *${source}*`,
     divider,
@@ -131,9 +135,14 @@ function formatArticle(article, summary, aiUsed = true, severityKeywords = [], t
     lines.push('', tiBlock);
   }
 
+  if (article.sourceLinks && article.sourceLinks.length > 1) {
+    const multiLinks = article.sourceLinks.map((sl) => `• ${escWA(sl.source)}: ${safeUrl(sl.url)}`).join('\n');
+    lines.push('', `📖 *All Reporting Sources:*`, multiLinks);
+  } else {
+    lines.push('', `🔗 ${url}`);
+  }
+
   lines.push(
-    '',
-    `🔗 ${url}`,
     `⏰ _${timeStr}_  ${aiLabel}`,
     divider
   );
@@ -275,6 +284,10 @@ function formatArticleForTelegram(article, summary, aiUsed = true, severityKeywo
     lines.push(`🚨 <b>CRITICAL ALERT</b> 🚨`);
   }
 
+  if (article.isMasterBulletin && article.sources && article.sources.length > 1) {
+    lines.push(`📰 <b>MASTER BULLETIN</b> — Coverage from <b>${article.sources.length} Sources</b>`);
+  }
+
   lines.push(
     `${esc(category)}  |  <b>${source}</b>`,
     divider,
@@ -287,9 +300,14 @@ function formatArticleForTelegram(article, summary, aiUsed = true, severityKeywo
     lines.push('', tiBlock);
   }
 
+  if (article.sourceLinks && article.sourceLinks.length > 1) {
+    const multiLinks = article.sourceLinks.map((sl) => `• ${esc(sl.source)}: <a href="${esc(safeUrl(sl.url))}">Read</a>`).join('\n');
+    lines.push('', `📖 <b>All Reporting Sources:</b>`, multiLinks);
+  } else {
+    lines.push('', `🔗 <a href="${esc(url)}">Read full article</a>`);
+  }
+
   lines.push(
-    '',
-    `🔗 <a href="${esc(url)}">Read full article</a>`,
     `⏰ <i>${esc(timeStr)}</i>  ${aiLabel}`,
     divider
   );
