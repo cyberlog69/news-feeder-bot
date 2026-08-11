@@ -492,6 +492,27 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       return;
     }
 
+    // ── Executive CISO Briefing API ────────────────────────────────────
+    if (url === '/api/ciso-briefing') {
+      try {
+        const { generateCisoBriefing, formatBriefingHtml } = require('./report-generator');
+        const briefing = generateCisoBriefing(20);
+        const format = req.url.includes('format=html') ? 'html' : 'json';
+
+        if (format === 'html') {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', ...secureHeaders() });
+          res.end(formatBriefingHtml(briefing));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify(briefing, null, 2));
+        }
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
     // ── Sources API ────────────────────────────────────────────────────
     if (url === '/api/sources' && req.method === 'GET') {
       const config = pipeline.config || {};

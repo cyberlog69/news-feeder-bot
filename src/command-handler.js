@@ -116,6 +116,13 @@ async function handleCommand(text, config, startTime, senderInfo = {}) {
       ].join('\n');
     }
 
+    case '/briefing':
+    case '/ciso-report': {
+      const { generateCisoBriefing, formatBriefingMarkdown } = require('./report-generator');
+      const briefing = generateCisoBriefing(10);
+      return formatBriefingMarkdown(briefing);
+    }
+
     case '/help':
     default: {
       return [
@@ -125,6 +132,7 @@ async function handleCommand(text, config, startTime, senderInfo = {}) {
         '• `/sources` - List all active RSS news feeds',
         '• `/search <keyword>` - Search recent articles by topic',
         '• `/ask <question>` - Ask AI conversational questions about your news',
+        '• `/briefing` - Generate an Executive CISO Threat Intelligence Briefing',
         '• `/subscribe <topics>` - Subscribe to specific topics (e.g. ransomware, cve, critical)',
         '• `/unsubscribe` - Reset topic filters to receive all news',
         '• `/subscriptions` - View your active subscription topics',
