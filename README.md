@@ -37,10 +37,11 @@
 
 ---
 
-## 🆕 What's New in v3.13
+## 🆕 What's New in v3.14
 
 | Module | Details |
 |---|---|
+| 🛡️ **Enterprise Security & SIEM Audit** | Role-Based Access Control (RBAC) with constant-time token validation (`admin`, `analyst`, `auditor`), sliding-window IP rate limiting, ArcSight CEF & Elastic ECS audit log exporter (`/api/audit-log`), and automated SQLite backup & VACUUM engine (`/api/db/backup`). |
 | 🌐 **Social & Public Syndication** | Broadcasts critical security alerts to Mastodon/Fediverse and Bluesky (AT Protocol). Exposes public syndication endpoints: RSS 2.0 (`/feed.xml`), Atom 1.0 (`/atom.xml`), and JSON Feed 1.1 (`/feed.json`). |
 | 📑 **Executive CISO Briefings** | Generates strategic CISO executive intelligence reports in Markdown and print/PDF-ready HTML summarizing active CISA KEV zero-days, dark web ransomware disclosures, and tactical recommendations via `/briefing` or `GET /api/ciso-briefing`. |
 | 📊 **Next-Gen SOC Dashboard & Radar** | Military-grade dark glassmorphism SOC console (`http://localhost:3000`) with Threat Telemetry HUD, live CISA KEV & Ransomware victim stream, and REST APIs (`/api/threat-intel`, `/api/subscriptions`, `/api/system-status`). |
@@ -53,7 +54,7 @@
 | 🔊 **Audio & Multimedia** | Text-to-Speech narrative summaries, native **Telegram Voice Notes**, and dynamic SVG visual alert cards for critical zero-day news. |
 | 📧 **9 Delivery Channels** | WhatsApp, Telegram, Discord, Google Chat, Slack, MS Teams, HTML Email Newsletters, Mobile Push (Pushover/Ntfy.sh), and Outbound SOAR/SIEM Webhooks. |
 | 🎛️ **Feed Health & Admin UI** | RSS Feed Health Index tracking latency (ms), HTTP status, and error counts. Visual Feed Manager REST APIs (`/api/sources`) to add/toggle feeds without manual config edits. |
-| 🧪 **49/49 Unit Tests** | Automated Node.js native test suite (`npm test`) covering Social Media, Syndication Feeds, CISO Briefings, SOC Dashboard APIs, Subscriptions, Story Clustering, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
+| 🧪 **54/54 Unit Tests** | Automated Node.js native test suite (`npm test`) covering RBAC Security, Rate Limiting, SIEM CEF Logging, DB Maintenance, Social Media, Syndication Feeds, CISO Briefings, SOC Dashboard APIs, Subscriptions, Story Clustering, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
 
 ---
 
@@ -61,6 +62,9 @@
 
 | Category | Feature | Description |
 |---|---|---|
+| 🛡️ **Security** | **RBAC & Rate Limiter** | Constant-time token auth, tiered roles & IP sliding-window DoS protection |
+| | **SIEM Audit Logging** | Standardized ArcSight CEF and Elastic ECS audit logging (`/api/audit-log`) |
+| | **DB Maintenance** | Automated timestamped backups (`data/backups/`), WAL checkpoint & VACUUM |
 | 🌐 **Public Feeds** | **Feed Syndication** | Auto-generates public RSS 2.0 (`/feed.xml`), Atom (`/atom.xml`), and JSON Feed (`/feed.json`) |
 | | **Social Broadcasting** | Broadcasts alerts to Mastodon/Fediverse and Bluesky (AT Protocol) |
 | 📑 **Reporting** | **CISO Executive Briefings**| Auto-compiles strategic threat reports in Markdown/PDF-ready HTML via `/briefing` |
