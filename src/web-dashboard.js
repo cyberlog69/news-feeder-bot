@@ -238,9 +238,25 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
   // In production, bind to 0.0.0.0 so the cloud platform can reach us.
   // In development, bind to 127.0.0.1 (localhost only — more secure).
   const host = IS_PROD ? '0.0.0.0' : '127.0.0.1';
+  const { createRateLimiter } = require('./security-guard');
+  const rateLimiter = createRateLimiter({ windowMs: 60000, maxRequests: 200 });
 
   const server = http.createServer(async (req, res) => {
     const url = req.url.split('?')[0];
+    const clientIp = req.socket.remoteAddress || '127.0.0.1';
+
+    // ── Rate Limiting Check ──────────────────────────────────────────────
+    const rateCheck = rateLimiter.checkLimit(clientIp);
+    if (!rateCheck.allowed && url.startsWith('/api/')) {
+      res.writeHead(429, {
+        'Content-Type': 'application/json',
+        'Retry-After': Math.ceil(rateCheck.resetMs / 1000),
+        'X-RateLimit-Limit': 200,
+        'X-RateLimit-Remaining': 0
+      });
+      res.end(JSON.stringify({ error: 'Too Many Requests — Rate limit exceeded.' }));
+      return;
+    }
 
     // ── Security headers helper ──────────────────────────────────────────
     function secureHeaders(extra = {}) {
@@ -538,6 +554,36 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       const jsonFeed = generateJsonFeed(articles, `http://${req.headers.host || 'localhost:3000'}`);
       res.writeHead(200, { 'Content-Type': 'application/feed+json; charset=utf-8', ...secureHeaders() });
       res.end(JSON.stringify(jsonFeed, null, 2));
+      return;
+    }
+
+    // ── SIEM / SOC Audit Log Stream API (CEF / ECS) ───────────────────
+    if (url === '/api/audit-log') {
+      const { getRecentAuditLogs } = require('./audit-logger');
+      const logs = getRecentAuditLogs(50);
+      res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+      res.end(JSON.stringify({ total: logs.length, logs }));
+      return;
+    }
+
+    // ── SQLite Database Backup & Optimization API ──────────────────────
+    if (url === '/api/db/backup' && req.method === 'POST') {
+      if (!isTokenValid(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: 'Unauthorized: Admin token required' }));
+        return;
+      }
+
+      const { createDatabaseBackup, optimizeDatabase } = require('./db-maintenance');
+      const backupPath = createDatabaseBackup();
+      const optimized = optimizeDatabase();
+
+      res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+      res.end(JSON.stringify({
+        success: Boolean(backupPath),
+        backupPath,
+        optimized
+      }));
       return;
     }
 
