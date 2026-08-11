@@ -67,6 +67,28 @@ function initDb() {
         vector_json TEXT,
         created_at TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS cisa_kev_cache (
+        cve_id TEXT PRIMARY KEY,
+        vendor_project TEXT,
+        product TEXT,
+        vulnerability_name TEXT,
+        date_added TEXT,
+        required_action TEXT,
+        due_date TEXT,
+        known_ransomware_use INTEGER,
+        updated_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS ransomware_victims (
+        victim_id TEXT PRIMARY KEY,
+        group_name TEXT,
+        victim_name TEXT,
+        country TEXT,
+        sector TEXT,
+        discovered_at TEXT,
+        created_at TEXT
+      );
     `);
 
     // Migrate legacy JSON files if they exist
@@ -280,6 +302,77 @@ function getAllArticleVectors(limit = 100) {
   return stmt.all(limit);
 }
 
+// ── CISA KEV & Ransomware Storage API ─────────────────────────────────────────
+
+function getCisaKev(cveId) {
+  if (!cveId) return null;
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT cve_id as cveId, vendor_project as vendorProject, product,
+           vulnerability_name as vulnerabilityName, date_added as dateAdded,
+           required_action as requiredAction, due_date as dueDate,
+           known_ransomware_use as knownRansomwareUse
+    FROM cisa_kev_cache
+    WHERE cve_id = ?
+  `);
+  const row = stmt.get(cveId.toUpperCase().trim());
+  if (!row) return null;
+  return {
+    ...row,
+    knownRansomwareUse: Boolean(row.knownRansomwareUse)
+  };
+}
+
+function setCisaKev(cveId, kevData) {
+  if (!cveId || !kevData) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO cisa_kev_cache (
+      cve_id, vendor_project, product, vulnerability_name,
+      date_added, required_action, due_date, known_ransomware_use, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    cveId.toUpperCase().trim(),
+    kevData.vendorProject || '',
+    kevData.product || '',
+    kevData.vulnerabilityName || '',
+    kevData.dateAdded || '',
+    kevData.requiredAction || '',
+    kevData.dueDate || '',
+    kevData.knownRansomwareUse ? 1 : 0,
+    new Date().toISOString()
+  );
+}
+
+function isRansomwareVictimSeen(victimId) {
+  if (!victimId) return false;
+  const database = initDb();
+  const stmt = database.prepare(`SELECT 1 FROM ransomware_victims WHERE victim_id = ?`);
+  return Boolean(stmt.get(victimId));
+}
+
+function markRansomwareVictimSeen(victimId, groupName, victimName, country, sector, discoveredAt) {
+  if (!victimId || !groupName) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO ransomware_victims (
+      victim_id, group_name, victim_name, country, sector, discovered_at, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    victimId,
+    groupName,
+    victimName || '',
+    country || '',
+    sector || '',
+    discoveredAt || new Date().toISOString(),
+    new Date().toISOString()
+  );
+}
+
 module.exports = {
   initDb,
   isUrlSeen,
@@ -294,5 +387,9 @@ module.exports = {
   getCachedTranslation,
   setCachedTranslation,
   saveArticleVector,
-  getAllArticleVectors
+  getAllArticleVectors,
+  getCisaKev,
+  setCisaKev,
+  isRansomwareVictimSeen,
+  markRansomwareVictimSeen
 };

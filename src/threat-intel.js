@@ -168,9 +168,17 @@ async function enrichArticle(article, fullText = '') {
     return null;
   }
 
-  // Fetch CVE & EPSS scores for detected CVEs (max 3)
+  // Fetch CVE & EPSS scores and CISA KEV status for detected CVEs (max 3)
+  const { checkCisaKev } = require('./cisa-kev');
   const cveDetails = await Promise.all(
-    cveIds.slice(0, 3).map((id) => fetchCveAndEpss(id))
+    cveIds.slice(0, 3).map(async (id) => {
+      const basic = await fetchCveAndEpss(id);
+      const cisa = await checkCisaKev(id).catch(() => null);
+      return {
+        ...basic,
+        cisaKev: cisa || null
+      };
+    })
   );
 
   return {

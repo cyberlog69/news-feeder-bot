@@ -73,6 +73,10 @@ function formatThreatIntelWA(threatIntel) {
       let info = c.cveId;
       if (c.cvss) info += ` (CVSS ${c.cvss}${c.severity ? ' ' + c.severity : ''})`;
       if (c.epss) info += ` [EPSS ${Math.round(c.epss * 100)}%]`;
+      if (c.cisaKev?.isKev) {
+        info += ` 🚨 [CISA KEV: ACTIVELY EXPLOITED]`;
+        if (c.cisaKev.knownRansomwareUse) info += ` 🏴‍☠️ [RANSOMWARE USE]`;
+      }
       return info;
     }).join(', ');
     lines.push(`• *CVEs:* ${cveStr}`);
@@ -220,6 +224,10 @@ function formatThreatIntelTelegram(threatIntel) {
       let info = esc(c.cveId);
       if (c.cvss) info += ` (CVSS ${c.cvss}${c.severity ? ' ' + esc(c.severity) : ''})`;
       if (c.epss) info += ` [EPSS ${Math.round(c.epss * 100)}%]`;
+      if (c.cisaKev?.isKev) {
+        info += ` 🚨 <b>[CISA KEV: ACTIVELY EXPLOITED]</b>`;
+        if (c.cisaKev.knownRansomwareUse) info += ` 🏴‍☠️ <b>[RANSOMWARE USE]</b>`;
+      }
       return info;
     }).join(', ');
     lines.push(`• <b>CVEs:</b> ${cveStr}`);
