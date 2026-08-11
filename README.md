@@ -37,10 +37,11 @@
 
 ---
 
-## 🆕 What's New in v3.8
+## 🆕 What's New in v3.9
 
 | Module | Details |
 |---|---|
+| 📰 **AI Story Clustering & Master Bulletins** | Automatically identifies overlapping breaking news coverage across multiple feeds using Cosine Similarity on term-frequency vectors and shared CVEs. Merges facts into a single consolidated **Master Bulletin** citing all sources. |
 | 🏴‍☠️ **Live Ransomware & CISA KEV Tracker** | Ingests real-time victim disclosures from dark web ransomware leak portals (LockBit, RansomHub, BlackCat, Akira, Play). Syncs CISA's official *Known Exploited Vulnerabilities* (KEV) catalog with SQLite persistence and warning badges. |
 | 🧠 **RAG & Conversational AI (`/ask`)** | Ask natural language questions via `/ask <question>`. Searches historical news in SQLite using term-frequency vector embeddings and Cosine Similarity, generating cited AI responses. |
 | 🛡️ **Deep Threat Intelligence** | Auto-enriches security news with CVE details, FIRST.org EPSS exploit probabilities, IOC extraction (IPs, hashes, defanged domains), and MITRE ATT&CK mapping. |
@@ -48,7 +49,7 @@
 | 🔊 **Audio & Multimedia** | Text-to-Speech narrative summaries, native **Telegram Voice Notes**, and dynamic SVG visual alert cards for critical zero-day news. |
 | 📧 **9 Delivery Channels** | WhatsApp, Telegram, Discord, Google Chat, Slack, MS Teams, HTML Email Newsletters, Mobile Push (Pushover/Ntfy.sh), and Outbound SOAR/SIEM Webhooks. |
 | 🎛️ **Feed Health & Admin UI** | RSS Feed Health Index tracking latency (ms), HTTP status, and error counts. Visual Feed Manager REST APIs (`/api/sources`) to add/toggle feeds without manual config edits. |
-| 🧪 **37/37 Unit Tests** | Automated Node.js native test suite (`npm test`) covering security, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
+| 🧪 **39/39 Unit Tests** | Automated Node.js native test suite (`npm test`) covering security, Story Clustering, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
 
 ---
 
@@ -56,6 +57,8 @@
 
 | Category | Feature | Description |
 |---|---|---|
+| 📰 **Fusion** | **Story Clustering** | Groups overlapping news coverage using Cosine Similarity & shared CVE IDs |
+| | **Master Bulletins** | Consolidates multi-source breaking news into 1 all-in-one bulletin with multi-citations |
 | 🏴‍☠️ **Threat Intel** | **CISA KEV Sync** | Real-time lookup against CISA Known Exploited Vulnerabilities catalog with ransomware flags |
 | | **Ransomware Leak Tracker** | Real-time dark web leak portal tracking across major ransomware gangs with victim alerts |
 | 🤖 **AI & RAG** | **Conversational RAG** | Ask questions (`/ask`) over historical news using vector retrieval & AI synthesis |
