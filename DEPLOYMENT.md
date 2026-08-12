@@ -1,439 +1,344 @@
-# 🚀 Deployment Guide — News Feeder Bot v3.0
+# 🚀 Multi-Cloud Deployment Guide — News Feeder Bot v3.14.0
 
-Complete guide for running the bot locally and on every major cloud platform.
-
----
-
-## 📋 Platform Comparison
-
-| Platform | WhatsApp | Telegram | Discord | Free? | Cost | Best For |
-|---|---|---|---|---|---|---|
-| **Local (PM2)** | ✅ | ✅ | ✅ | ✅ Free | Your electricity | Always-on PC/server |
-| **Docker (local)** | ✅ | ✅ | ✅ | ✅ Free | Your electricity | Isolated local env |
-| **Railway.app** | ✅ (volume) | ✅ | ✅ | Limited | ~$5/mo | Easiest cloud |
-| **Render.com** | ✅ (disk) | ✅ | ✅ | ✅ Free tier | Free/$7+ | Simple deployment |
-| **Fly.io** | ✅ (volume) | ✅ | ✅ | ✅ Free tier | Free/$1.94+/mo | Best free cloud |
-| **Oracle Cloud** | ✅ | ✅ | ✅ | ✅ Always Free | $0 forever | Free VPS |
-| **DigitalOcean** | ✅ | ✅ | ✅ | ❌ | $4/mo | Reliable VPS |
-| **AWS EC2** | ✅ | ✅ | ✅ | ✅ 1 yr free | Free/pay-as-go | Enterprise |
-
-> **⚠️ WhatsApp on Cloud**: Requires initial QR scan. See [WhatsApp Cloud Setup](#-whatsapp-on-cloud-deployments) section.
+This guide provides step-by-step instructions for deploying **News Feeder Bot** across all major free, low-cost, and enterprise cloud hosting platforms.
 
 ---
 
-## 1. 🖥️ Local Deployment — Direct Node.js
+## 📋 Table of Contents
 
-The simplest option. Runs on your Windows/Mac/Linux PC.
+1. [Architecture & System Requirements](#-architecture--system-requirements)
+2. [🆓 Oracle Cloud (OCI) Always Free VM (Recommended 100% Free Forever)](#1--oracle-cloud-oci-always-free-vm)
+3. [🆓 Google Cloud Platform (GCP) e2-micro & Cloud Run](#2--google-cloud-platform-gcp)
+4. [🚀 Fly.io (Container with Persistent Volume)](#3--flyio)
+5. [⚡ Render.com (Web Service)](#4--rendercom)
+6. [🚂 Railway.app (1-Click Container Deployment)](#5--railwayapp)
+7. [💎 Hetzner Cloud & DigitalOcean (Production VPS)](#6--hetzner-cloud--digitalocean)
+8. [☁️ Amazon Web Services (AWS Lightsail & EC2)](#7--amazon-web-services-aws)
+9. [🏠 Self-Hosted / Raspberry Pi / Home Lab](#8--self-hosted--raspberry-pi--home-lab)
+10. [🔒 Production Security & Hardening Checklist](#-production-security--hardening-checklist)
 
-### Prerequisites
-- Node.js 18+ ([nodejs.org](https://nodejs.org))
-- Google Chrome installed
+---
 
-### Steps
-```bash
-git clone https://github.com/cyberlog69/news-feeder-bot.git
-cd news-feeder-bot
-npm install
-cp .env.example .env
-# Edit .env with your API keys
-npm start
+## 🏗 Architecture & System Requirements
+
+```text
+                                  ┌───────────────────────────┐
+                                  │   RSS Feeds / Threat APIs │
+                                  └─────────────┬─────────────┘
+                                                │ (Cron Polling)
+┌───────────────────────────────────────────────▼───────────────────────────────────────────────┐
+│                                 News Feeder Bot v3.14.0                                       │
+│                                                                                               │
+│  ┌───────────────────────┐   ┌───────────────────────┐   ┌────────────────────────────────┐   │
+│  │ Threat Intel & CISA   │   │ Story Clustering &    │   │ Multi-Provider AI Summarizer   │   │
+│  │ KEV / Ransomware Gangs│   │ Master Bulletin Fusion│   │ (Groq/Gemini/OpenRouter/Ollama)│   │
+│  └───────────────────────┘   └───────────────────────┘   └────────────────────────────────┘   │
+│                                               │                                               │
+│                         ┌─────────────────────┴─────────────────────┐                         │
+│                         ▼                                           ▼                         │
+│              ┌─────────────────────┐                     ┌─────────────────────┐              │
+│              │ SQLite Vector Store │                     │ SOC Web Dashboard   │              │
+│              │ & Subscriptions DB  │                     │ & Syndication Feeds │              │
+│              └─────────────────────┘                     └─────────────────────┘              │
+└───────────────────────────────────────┬───────────────────────────────────────────────────────┘
+                                        │
+     ┌──────────────────────────────────┴──────────────────────────────────┐
+     ▼                                  ▼                                  ▼
+┌──────────────────────┐   ┌──────────────────────┐   ┌────────────────────────────────┐
+│ Messaging Channels   │   │ SOC / SIEM Ingestion │   │ Social Broadcasting            │
+│ WhatsApp • Telegram  │   │ Email • Webhooks     │   │ Mastodon • Bluesky             │
+│ Discord • Slack • Teams  │ Pushover • Ntfy.sh   │   │ RSS 2.0 • Atom • JSON Feed     │
+└──────────────────────┘   └──────────────────────┘   └────────────────────────────────┘
 ```
 
-Dashboard: http://localhost:3000
+### Memory & Compute Sizing
+
+| Workload Configuration | Minimum RAM | Recommended RAM | CPU |
+|---|---|---|---|
+| **Standard** (Telegram, Discord, Slack, Teams, Email, Push, Webhooks) | 256 MB | 512 MB | 1 vCPU |
+| **With WhatsApp Web** (Headless Chromium / Puppeteer engine) | 600 MB | 1 GB – 2 GB | 1 – 2 vCPU |
 
 ---
 
-## 2. 🔁 Local Deployment — PM2 (Recommended for 24/7)
+## 1. 🆓 Oracle Cloud (OCI) Always Free VM
 
-PM2 keeps the bot running after terminal closes and auto-starts on reboot.
+Oracle Cloud offers the most generous free-tier compute in the world with **zero cost forever**:
+* **Specs**: 4 ARM OCPUs, **24 GB RAM**, and 200 GB NVMe storage (Ampere A1) or 2 AMD Micro VMs (1 GB RAM each).
 
-### Setup
+### Step-by-Step Setup:
+
+1. **Create an OCI Instance**:
+   * Navigate to **Compute → Instances → Create Instance**.
+   * Choose **Ubuntu 24.04 / 22.04 LTS (aarch64 or x86_64)**.
+   * Shape: Choose **Ampere (ARM)** with 2 to 4 OCPUs and 12 to 24 GB RAM.
+   * Add your SSH public key and click **Create**.
+
+2. **Open Firewall Ports in OCI Security List**:
+   * Go to **Virtual Cloud Networks → Security Lists → Default Security List**.
+   * Add Ingress Rules:
+     * `Port 22` (SSH)
+     * `Port 80 / 443` (HTTP/HTTPS)
+     * `Port 3000` (News Feeder Bot Web Dashboard)
+
+3. **Connect and Install Node.js & Docker**:
+   ```bash
+   ssh ubuntu@<YOUR_OCI_PUBLIC_IP>
+
+   # Update packages
+   sudo apt update && sudo apt upgrade -y
+
+   # Install Docker and Docker Compose
+   sudo apt install -y docker.io docker-compose git
+   sudo usermod -aG docker ubuntu
+   newgrp docker
+   ```
+
+4. **Clone & Configure**:
+   ```bash
+   git clone https://github.com/cyberlog69/news-feeder-bot.git
+   cd news-feeder-bot
+   cp .env.example .env
+   nano .env  # Configure bot tokens and API keys
+   ```
+
+5. **Launch with Docker Compose**:
+   ```bash
+   docker-compose up -d
+   docker-compose logs -f
+   ```
+
+6. *(Optional)* **WhatsApp Authentication**:
+   If WhatsApp is enabled, view the QR code terminal stream using:
+   ```bash
+   docker logs -f news-feeder-bot
+   ```
+
+---
+
+## 2. 🆓 Google Cloud Platform (GCP)
+
+### Option A: GCP Compute Engine `e2-micro` (100% Free Forever)
+* Available in `us-central1`, `us-east1`, or `us-west1` with 1 GB RAM & 30 GB disk.
+
 ```bash
-# Install PM2 globally
-npm install -g pm2
+# 1. Create VM via gcloud CLI
+gcloud compute instances create newsbot-vm \
+    --zone=us-central1-a \
+    --machine-type=e2-micro \
+    --image-family=ubuntu-2404-lts-amd64 \
+    --image-project=ubuntu-os-cloud \
+    --boot-disk-size=30GB
 
-# Start the bot
+# 2. Add 2GB Swap Memory (Recommended for Chromium stability)
+ssh <YOUR_VM_IP>
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# 3. Clone and Run
+git clone https://github.com/cyberlog69/news-feeder-bot.git
+cd news-feeder-bot
+cp .env.example .env
+npm install --production
 npm run pm2:start
-
-# Save the process list (so it survives reboots)
-pm2 save
-
-# Configure auto-start on system reboot
-pm2 startup
-# Follow the command it prints (copy-paste with sudo)
 ```
 
-### Useful PM2 Commands
+### Option B: Google Cloud Run (Serverless Container)
 ```bash
-npm run pm2:logs      # view live logs
-npm run pm2:monit     # CPU/memory dashboard
-npm run pm2:restart   # restart without downtime
-npm run pm2:stop      # stop
-npm run pm2:delete    # remove from PM2
-```
-
-### Windows — PM2 with Auto-Start
-```powershell
-# Install PM2 Windows startup
-npm install -g pm2-windows-startup
-pm2-startup install
-
-# Start bot
-pm2 start ecosystem.config.js --env production
-pm2 save
+# Build and deploy container image to Google Cloud Run
+gcloud run deploy news-feeder-bot \
+    --source . \
+    --region us-central1 \
+    --allow-unauthenticated \
+    --port 3000 \
+    --memory 1Gi \
+    --cpu 1 \
+    --min-instances 1 \
+    --set-env-vars NODE_ENV=production,PORT=3000
 ```
 
 ---
 
-## 3. 🐳 Docker — Local Container
+## 3. 🚀 Fly.io
 
-Runs in an isolated container. WhatsApp session persists via Docker volumes.
+Fly.io runs Docker containers near your users with persistent NVMe volumes.
 
-### Prerequisites
-- [Docker Desktop](https://docker.com/products/docker-desktop) installed
+1. **Install flyctl & Login**:
+   ```bash
+   powershell -Command "iwr https://fly.io/install.ps1 -useb | iex" # Windows
+   # or on Linux/macOS: curl -L https://fly.io/install.sh | sh
+   fly auth login
+   ```
 
-### First Run (with WhatsApp)
+2. **Initialize App**:
+   ```bash
+   fly launch --no-deploy
+   ```
+
+3. **Create Persistent Volume for SQLite & WhatsApp**:
+   ```bash
+   fly volumes create newsbot_data --size 1 --region iad
+   ```
+
+4. **Update `fly.toml`**:
+   Ensure volume mount is defined:
+   ```toml
+   [mounts]
+     source = "newsbot_data"
+     destination = "/app/data"
+
+   [[vm]]
+     size = "shared-cpu-1x"
+     memory = "512mb"
+   ```
+
+5. **Set Secrets and Deploy**:
+   ```bash
+   fly secrets set TELEGRAM_BOT_TOKEN="your-token" TELEGRAM_CHAT_ID="your-chat-id" GROQ_API_KEY="your-groq-key"
+   fly deploy
+   ```
+
+---
+
+## 4. ⚡ Render.com
+
+1. **Push your repository** to GitHub.
+2. Log in to [Render.com](https://render.com) → **New +** → **Web Service**.
+3. Select your `news-feeder-bot` GitHub repository.
+4. Set:
+   * **Runtime**: `Docker`
+   * **Plan**: `Free` (or `Starter` $7/mo for persistent storage)
+   * **Environment Variables**: Add all `.env` keys (`GROQ_API_KEY`, `TELEGRAM_BOT_TOKEN`, `DISCORD_WEBHOOK_URL`, etc.).
+5. **Keep-Alive Tip for Free Tier**:
+   Free instances sleep after 15 minutes of inactivity. Set up a free 5-minute health check ping to your Render URL (e.g. `https://your-bot.onrender.com/health`) on [UptimeRobot](https://uptimerobot.com) or [Cron-Job.org](https://cron-job.org).
+
+---
+
+## 5. 🚂 Railway.app
+
+1. Go to [Railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**.
+2. Railway will automatically detect the `Dockerfile`.
+3. In **Settings → Volumes**, click **Add Volume** and mount it to `/app/data`.
+4. Under **Variables**, paste your environment variables.
+5. Generate a domain under **Networking** to access your SOC dashboard.
+
+---
+
+## 6. 💎 Hetzner Cloud & DigitalOcean (Production VPS)
+
+Hetzner Cloud (`~€3.79/mo`) and DigitalOcean (`$4-$6/mo`) offer unmatched performance and reliability.
+
+### Complete Production Setup:
+
 ```bash
-# Build image
-docker build -t news-feeder-bot .
+# 1. SSH into VPS
+ssh root@<SERVER_IP>
 
-# Create .env file with your credentials
+# 2. Setup UFW Firewall
+ufw allow OpenSSH
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw enable
+
+# 3. Install Docker & Compose
+curl -fsSL https://get.docker.com | sh
+apt install -y docker-compose-plugin
+
+# 4. Clone and Launch
+git clone https://github.com/cyberlog69/news-feeder-bot.git /opt/news-feeder-bot
+cd /opt/news-feeder-bot
 cp .env.example .env
-# Edit .env
+nano .env
 
-# Start container — first run will show QR code in logs
-docker-compose up -d
+# 5. Start in Background
+docker compose up -d
 
-# Watch for QR code, then scan it
-docker-compose logs -f
+# 6. Enable Automatic Restart on System Reboot
+docker update --restart=always news-feeder-bot
 ```
 
-After scanning, the session is saved in the `newsbot_whatsapp_auth` volume.
-
-### Useful Docker Commands
-```bash
-npm run docker:up       # start in background
-npm run docker:logs     # follow logs
-npm run docker:restart  # restart
-npm run docker:down     # stop and remove containers
+### SSL Reverse Proxy with Caddy (Optional for HTTPS Dashboard):
+Create `/opt/Caddyfile`:
+```caddy
+newsbot.yourdomain.com {
+    reverse_proxy localhost:3000
+}
 ```
-
-### Dashboard
-http://localhost:3000
-
----
-
-## 4. ☁️ Railway.app (Easiest Cloud)
-
-Railway auto-deploys from GitHub. Supports persistent volumes for WhatsApp.
-
-### Steps
-1. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub
-2. Select `news-feeder-bot` repository
-3. Railway detects `railway.json` and uses the Dockerfile automatically
-4. Go to **Variables** tab → Add all variables from `.env.example`:
-   ```
-   GEMINI_API_KEY     = your_key
-   TELEGRAM_BOT_TOKEN = your_token
-   TELEGRAM_TARGET    = @yourchannel
-   DISCORD_WEBHOOK_URL= your_webhook (optional)
-   NODE_ENV           = production
-   ```
-5. For WhatsApp: Add a **Volume** mount at `/app/data` and `/app/.wwebjs_auth`
-6. Click **Deploy**
-
-### For WhatsApp on Railway
-See [WhatsApp Cloud Setup](#-whatsapp-on-cloud-deployments) below.
-
-### Estimated Cost
-- Starter plan: ~$5 credit/month (usually enough for this bot)
-- Add volume storage: $0.25/GB/month
-
----
-
-## 5. 🎨 Render.com (Free Tier Available)
-
-### Steps
-1. Go to [render.com](https://render.com) → New → Blueprint
-2. Connect your GitHub repository
-3. Render detects `render.yaml` automatically
-4. Go to **Environment** tab → Add secrets:
-   ```
-   GEMINI_API_KEY
-   TELEGRAM_BOT_TOKEN
-   TELEGRAM_TARGET
-   DISCORD_WEBHOOK_URL  (optional)
-   ```
-5. Click **Apply**
-
-### Free Tier Notes
-- 750 compute hours/month (one service runs ~31 days = 744 hrs ✅)
-- Services spin down after 15 min of inactivity on free tier
-  → **Set `WHATSAPP_TARGET` to empty** on free tier (use Telegram/Discord)
-  → Or upgrade to Starter ($7/mo) for always-on
-
-### Persistent Disk (for WhatsApp)
-The `render.yaml` includes a disk definition (paid: $0.25/GB/month).
-Comment it out for Telegram/Discord only (free tier compatible).
-
----
-
-## 6. 🪂 Fly.io (Best Free Cloud Option)
-
-Fly.io offers 3 always-on free VMs — perfect for this bot.
-
-### Prerequisites
+Run Caddy:
 ```bash
-# Install Fly CLI
-# Windows (PowerShell)
-iwr https://fly.io/install.ps1 -useb | iex
-
-# Linux/Mac
-curl -L https://fly.io/install.sh | sh
-```
-
-### Deployment Steps
-```bash
-# Login
-fly auth login
-
-# Edit fly.toml — change app name to something unique
-# app = "news-feeder-bot-yourname"
-
-# Create the app (first time only)
-fly launch --no-deploy
-
-# Create persistent volume for data
-fly volumes create newsbot_data --size 1 --region sin
-
-# Set secrets (never put in fly.toml)
-fly secrets set GEMINI_API_KEY=your_key
-fly secrets set TELEGRAM_BOT_TOKEN=your_token
-fly secrets set TELEGRAM_TARGET=@yourchannel
-fly secrets set DISCORD_WEBHOOK_URL=your_webhook
-fly secrets set NODE_ENV=production
-
-# Deploy
-fly deploy
-
-# Watch logs
-fly logs
-```
-
-### For WhatsApp on Fly.io
-```bash
-# Set WhatsApp target
-fly secrets set WHATSAPP_TARGET=your_group_id@g.us
-
-# SSH into the machine for initial QR scan
-fly ssh console
-# Inside: node index.js
-# Scan QR, then Ctrl+C and restart normally: fly deploy
-```
-
-### Free Tier Limits
-- 3 shared VMs (256MB RAM each)
-- Recommend: 1 VM with 512MB (`fly scale memory 512`)
-- 160GB outbound data/month
-- 3GB volume storage total
-
----
-
-## 7. 🟠 Oracle Cloud Free Tier (Always Free VPS)
-
-Oracle offers **4 ARM VMs free forever** — no credit card required after signup.
-
-### VM Specifications (Always Free)
-- 4 OCPUs (ARM), 24GB RAM shared across VMs
-- 200GB block volume storage
-- **Perfect for this bot** — runs WhatsApp, Telegram, Discord with no limits
-
-### Setup After Creating VM
-```bash
-# SSH into your Oracle VM
-ssh ubuntu@YOUR_VM_IP
-
-# Update system
-sudo apt update && sudo apt upgrade -y
-
-# Install Node.js 20
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-
-# Install Google Chrome
-wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-sudo apt install -y ./google-chrome-stable_current_amd64.deb
-
-# Install PM2
-sudo npm install -g pm2
-
-# Clone and setup
-git clone https://github.com/cyberlog69/news-feeder-bot.git
-cd news-feeder-bot
-npm install
-cp .env.example .env
-nano .env  # fill in credentials
-
-# Start with PM2
-pm2 start ecosystem.config.js --env production
-pm2 save
-pm2 startup  # follow the printed command
-```
-
-### Access Dashboard from Outside
-```bash
-# Open port 3000 in Oracle Cloud security list
-# Then access: http://YOUR_VM_IP:3000
+docker run -d --name caddy --restart always \
+  -p 80:80 -p 443:443 \
+  -v /opt/Caddyfile:/etc/caddy/Caddyfile \
+  -v caddy_data:/data \
+  caddy:alpine
 ```
 
 ---
 
-## 8. 💧 DigitalOcean Droplet ($4/month)
+## 7. ☁️ Amazon Web Services (AWS)
 
-### Setup
+### AWS Lightsail ($3.50/month)
+1. Open **AWS Lightsail Console** → **Create Instance**.
+2. Select **Linux/Unix** → **OS Only** → **Ubuntu 24.04 LTS**.
+3. Choose the **$3.50/mo plan** (1 vCPU, 512 MB – 1 GB RAM, 20 GB SSD).
+4. Connect via browser SSH and run standard Docker Compose setup.
+
+### AWS EC2 (t2.micro / t4g.small Free Tier)
+1. Launch an `e2-micro` or `t4g.small` instance.
+2. In Security Groups, allow inbound ports `22` and `3000`.
+3. Use PM2 or Docker Compose to manage the background daemon.
+
+---
+
+## 8. 🏠 Self-Hosted / Raspberry Pi / Home Lab
+
+Deploying on a home server (Raspberry Pi 4/5, Synology NAS, Unraid, Proxmox, or Mini PC) provides **100% privacy and zero monthly cloud costs**.
+
+### Raspberry Pi 4 / 5 (ARM64)
 ```bash
-# Create a $4/mo Ubuntu Droplet at digitalocean.com
-# SSH in, then:
-
-# Install Node.js
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
-sudo apt install -y nodejs
-
-# Install Chrome
-wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-sudo apt install -y ./google-chrome-stable_current_amd64.deb
-
-# Install PM2
-sudo npm install -g pm2
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
 
 # Clone and run
 git clone https://github.com/cyberlog69/news-feeder-bot.git
 cd news-feeder-bot
-npm install
-cp .env.example .env && nano .env
-pm2 start ecosystem.config.js --env production
-pm2 save && pm2 startup
+cp .env.example .env
+docker compose up -d
 ```
+
+### Synology NAS / Container Manager
+1. Open **Container Manager** (or Docker) in DSM.
+2. Create a new Project pointing to the `news-feeder-bot` folder with `docker-compose.yml`.
+3. Map `/app/data` to a persistent shared folder (e.g. `/volume1/docker/newsbot/data`).
+4. Set Environment Variables and click **Build & Start**.
 
 ---
 
-## 📱 WhatsApp on Cloud Deployments
+## 🔒 Production Security & Hardening Checklist
 
-WhatsApp requires a QR scan on first run. Here's how to handle this on cloud:
-
-### Method 1: SSH + Terminal QR (Recommended)
-```bash
-# On Railway/Fly.io/DigitalOcean:
-# SSH into your instance
-fly ssh console          # Fly.io
-# OR connect via cloud dashboard terminal
-
-# Run bot temporarily to get QR
-NODE_ENV=development node index.js
-
-# Scan QR with WhatsApp on your phone
-# Once authenticated (✔ WhatsApp client READY), press Ctrl+C
-
-# Restart normally — session is now saved to volume
-```
-
-### Method 2: Run Locally First, Upload Session
-```bash
-# 1. Run locally and scan QR
-npm start
-
-# 2. After "✔ WhatsApp client READY", stop the bot (Ctrl+C)
-
-# 3. Upload .wwebjs_auth/ to your cloud volume
-# For Railway: use railway volume commands
-# For Docker: copy into named volume
-# For VPS: scp -r .wwebjs_auth/ user@server:~/news-feeder-bot/
-```
-
-### Method 3: Telegram/Discord Only (Zero QR hassle)
-Simply don't set `WHATSAPP_TARGET` in your cloud `.env`.
-The bot will skip WhatsApp and work 100% with Telegram and Discord.
-
----
-
-## 🔐 Secrets Management
-
-### ❌ Never Do This
-```bash
-# NEVER put secrets in code, fly.toml, render.yaml, or railway.json
-GEMINI_API_KEY=my-real-key   # BAD — goes into git!
-```
-
-### ✅ Always Use
-| Platform | How to Set Secrets |
+| Security Measure | How to Implement |
 |---|---|
-| Railway | Dashboard → Variables tab |
-| Render | Dashboard → Environment tab |
-| Fly.io | `fly secrets set KEY=value` |
-| Docker | `.env` file + `env_file:` in compose |
-| PM2 / VPS | `.env` file (never committed) |
+| **Dashboard Token Auth** | Set `DASHBOARD_TOKEN="your-secure-random-token"` in `.env` |
+| **RBAC Roles** | Configure `ADMIN_TOKEN`, `ANALYST_TOKEN`, and `AUDITOR_TOKEN` |
+| **SSRF Prevention** | Built-in IP filtering blocks private RFC1918 subnets from custom RSS URLs |
+| **Automated Backups** | Trigger snapshots via `POST /api/db/backup` or check `data/backups/` |
+| **Database Vacuuming** | WAL checkpoints and SQLite vacuum run automatically |
+| **Firewall (UFW)** | Only expose port `3000` (or `443` through reverse proxy); block raw internal ports |
 
 ---
 
-## 🌐 Environment Variables Reference
+## 📊 Quick Deployment Summary Matrix
 
-| Variable | Required | Description |
-|---|---|---|
-| `GEMINI_API_KEY` | Recommended | Gemini AI API key (free at aistudio.google.com) |
-| `WHATSAPP_TARGET` | Optional | Phone/group ID for WhatsApp delivery |
-| `TELEGRAM_BOT_TOKEN` | Optional | Bot token from @BotFather |
-| `TELEGRAM_TARGET` | Optional | Channel/group ID for Telegram |
-| `DISCORD_WEBHOOK_URL` | Optional | Discord webhook for Discord delivery |
-| `NODE_ENV` | Production | Set to `production` on cloud |
-| `PORT` | Cloud | Auto-set by Railway/Render/Fly.io |
-| `CHROME_PATH` | Optional | Override Chrome binary path |
-| `WWEBJS_AUTH_PATH` | Optional | Override WhatsApp auth directory |
-| `DISCORD_USERNAME` | Optional | Custom Discord bot display name |
-| `DISCORD_AVATAR_URL` | Optional | Custom Discord bot avatar URL |
-
----
-
-## 🏥 Health Check
-
-All cloud deployments expose: `GET /health`
-
-```json
-{
-  "status": "ok",
-  "uptime_sec": 3600,
-  "total_sent": 142,
-  "environment": "production",
-  "timestamp": "2026-06-16T00:00:00.000Z"
-}
-```
-
-Extended metrics at: `GET /metrics`
-
----
-
-## 🔧 Troubleshooting
-
-| Problem | Solution |
-|---|---|
-| WhatsApp QR not showing | Run with `NODE_ENV=development node index.js` locally |
-| Chrome not found in Docker | Puppeteer downloads its own — check container logs |
-| Out of memory in Docker | Increase `memory:` in `docker-compose.yml` to `800M` |
-| Fly.io 256MB OOM | `fly scale memory 512` |
-| Railway build timeout | Puppeteer Chromium download can take 3-5 mins — normal |
-| Session expired on cloud | Re-run with terminal access and re-scan QR |
-| PORT already in use | Change `dashboardPort` in `config.json` |
-| Gemini 429 on cloud | Already handled with retry. Add `GEMINI_API_KEY` with paid plan |
-| `EADDRINUSE` dashboard | Another instance running — `pm2 delete all` then restart |
-
----
-
-## 📊 Resource Usage (typical)
-
-| Resource | Idle | Active (fetching) |
-|---|---|---|
-| RAM | ~180MB | ~400MB (with Chrome) |
-| CPU | <1% | 5–15% during pipeline |
-| Disk | ~50MB | ~100MB (with logs, cache) |
-| Network | ~1MB/5min | ~5MB/5min |
-
-Minimum recommended: **512MB RAM, 1 vCPU, 1GB storage**
+| Provider | Type | Monthly Cost | Storage Persistence | WhatsApp Ready |
+|---|---|---|---|---|
+| **Oracle Cloud (OCI)** | VPS | **$0.00 (Free Forever)** | ✅ 200 GB NVMe | ✅ Yes (24 GB RAM) |
+| **Google Cloud e2-micro** | VPS | **$0.00 (Free Forever)** | ✅ 30 GB Disk | ✅ Yes (with swap) |
+| **Fly.io** | PaaS | **Free Allowance** | ✅ Fly Volumes | ⚠️ Scale to 512MB |
+| **Railway.app** | PaaS | ~$5.00 / mo | ✅ Volume Mounts | ✅ Yes |
+| **Render.com** | PaaS | Free / $7.00 / mo | ⚠️ Paid Disks | ⚠️ Needs Keep-Alive |
+| **Hetzner Cloud** | VPS | ~€3.79 / mo (~$4) | ✅ 40 GB NVMe | 🚀 Outstanding |
+| **DigitalOcean** | VPS | $4.00 – $6.00 / mo | ✅ SSD Storage | ✅ Yes |
+| **Home Lab / Raspberry Pi** | Self-Hosted | **$0.00 (Hardware)** | ✅ Native Local Disk | ✅ Yes |

@@ -34,7 +34,7 @@ test('SIEM Audit Logger - formats standard CEF and ECS compliant audit events', 
   };
 
   const cef = formatCefEvent(event);
-  assert.ok(cef.startsWith('CEF:0|NewsFeederBot|SOCEngine|3.13|CISA_KEV_MATCH'));
+  assert.ok(cef.startsWith('CEF:0|NewsFeederBot|SOCEngine|3.14.0|CISA_KEV_MATCH'));
   assert.ok(cef.includes('suser=pipeline_worker'));
   assert.ok(cef.includes('msg=CVE-2024-3400'));
 

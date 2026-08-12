@@ -30,7 +30,7 @@ function formatCefEvent(event) {
   const details = String(event.details || '').replace(/=/g, '\\=');
   const actor = event.actor || 'system';
 
-  return `CEF:0|NewsFeederBot|SOCEngine|3.13|${type}|${name}|${sevNum}|src=${event.ip || '127.0.0.1'} suser=${actor} msg=${details} rt=${Date.now()}`;
+  return `CEF:0|NewsFeederBot|SOCEngine|3.14.0|${type}|${name}|${sevNum}|src=${event.ip || '127.0.0.1'} suser=${actor} msg=${details} rt=${Date.now()}`;
 }
 
 /**

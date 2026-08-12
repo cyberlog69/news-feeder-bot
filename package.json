@@ -1,6 +1,6 @@
 {
   "name": "news-feeder-bot",
-  "version": "3.0.0",
+  "version": "3.14.0",
   "description": "Automated cybersecurity & tech news delivery to WhatsApp, Telegram, and Discord",
   "main": "index.js",
   "scripts": {

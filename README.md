@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📰 News Feeder Bot v3.7
+# 📰 News Feeder Bot v3.14.0
 
 ### Autonomous Cybersecurity & Tech Intelligence Platform — Delivered Across 9 Platforms
 #### Threat Intel (CVE/EPSS/IOC/MITRE) · Multi-Language Translation · TTS Voice Summaries · RAG Conversational AI (`/ask`) · RSS Feed Health · 0 Audit Vulnerabilities
@@ -17,7 +17,7 @@
 
 ## 📌 Table of Contents
 
-- [What's New in v3.7](#-whats-new-in-v37)
+- [What's New in v3.14.0](#-whats-new-in-v3140)
 - [Features](#-features)
 - [Supported Delivery Channels](#-supported-delivery-channels)
 - [Quick Start](#-quick-start)
@@ -29,7 +29,7 @@
 - [Bot Commands](#-bot-commands)
 - [Web Dashboard & Administrative APIs](#-web-dashboard--administrative-apis)
 - [Platform Setup Guides](#-platform-setup-guides)
-- [Deployment Guides](#-deployment-guides)
+- [🚀 Multi-Cloud Deployment Guide (DEPLOYMENT.md)](DEPLOYMENT.md)
 - [npm Commands](#-npm-commands)
 - [Automated Unit Testing](#-automated-testing)
 - [Security](#-security)
@@ -37,7 +37,7 @@
 
 ---
 
-## 🆕 What's New in v3.14
+## 🆕 What's New in v3.14.0
 
 | Module | Details |
 |---|---|
@@ -277,54 +277,22 @@ The Web Dashboard listens on `http://localhost:3000`:
 
 ## 🌐 Deployment Guides
 
-### Option 1: Docker & Docker Compose (Recommended)
-```bash
-# Build & launch in detached mode
-docker-compose up -d --build
+> 📖 **Comprehensive Step-by-Step Guide**: For dedicated walkthroughs covering Oracle Cloud Always Free, GCP, Fly.io, Render, Railway, Hetzner, DigitalOcean, AWS, and Raspberry Pi, see [**`DEPLOYMENT.md`**](DEPLOYMENT.md).
 
-# View live logs & QR code
-docker-compose logs -f
-```
+### Quick Deployment Options:
 
-### Option 2: Cloud Deployment (Railway / Render / Fly.io)
-1. Push repository to GitHub.
-2. Create service on Railway/Render/Fly.io.
-3. Set environment variables (`NODE_ENV=production`, `PORT`, `GROQ_API_KEY`, `DASHBOARD_TOKEN`).
-4. Health check endpoint `/health` is monitored automatically.
-
-### Option 3: Linux VPS (Ubuntu/Debian Systemd Service)
-```bash
-# 1. Install Node.js 22 LTS & Chromium
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs chromium-browser
-
-# 2. Systemd service setup
-sudo nano /etc/systemd/system/news-feeder-bot.service
-```
-
-```ini
-[Unit]
-Description=News Feeder Bot Service
-After=network.target
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/news-feeder-bot
-ExecStart=/usr/bin/node src/index.js
-Restart=always
-RestartSec=10
-Environment=NODE_ENV=production
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable news-feeder-bot
-sudo systemctl start news-feeder-bot
-```
+* **Docker & Docker Compose (Recommended)**:
+  ```bash
+  docker-compose up -d --build
+  docker-compose logs -f
+  ```
+* **Production VPS (PM2 Background Daemon)**:
+  ```bash
+  npm run pm2:start
+  npm run pm2:logs
+  ```
+* **Cloud PaaS (Fly.io / Railway / Render)**:
+  Auto-detects included `Dockerfile`. Set `/app/data` volume mount for SQLite persistence.
 
 ---
 
@@ -351,7 +319,14 @@ Run the Node.js native test suite:
 npm test
 ```
 
-### Test Suite Breakdown (34/34 Passed)
+### Test Suite Breakdown (54/54 Passed)
+- `test/enterprise-security.test.js` — RBAC token validation, sliding-window rate limiting, CEF/ECS audit logging & DB maintenance
+- `test/social-broadcast.test.js` — Mastodon/Bluesky broadcasters and public RSS/Atom/JSON feed generators
+- `test/ciso-briefing.test.js` — Executive CISO threat briefing generator (Markdown & print/PDF HTML)
+- `test/soc-dashboard.test.js` — SOC glassmorphism dashboard REST APIs (`/api/threat-intel`, `/api/subscriptions`, `/api/system-status`)
+- `test/subscriptions.test.js` — Per-user & channel topic subscriptions engine (`/subscribe`)
+- `test/clustering.test.js` — Cosine similarity story clustering and Master Bulletin fusion
+- `test/cisa-ransomware.test.js` — CISA KEV catalog sync & dark web ransomware leak tracker
 - `test/audio-media.test.js` — TTS script formatting & SVG alert card generation
 - `test/channels.test.js` — HTML email template builder, Pushover/Ntfy push, Webhooks
 - `test/command.test.js` — `/status`, `/sources`, `/search`, `/ask` command handlers
