@@ -1,17 +1,13 @@
 # ─────────────────────────────────────────────────────────
-#  Dockerfile — News Feeder Bot v3.0
+#  Dockerfile — News Feeder Bot v3.14.0
 #
 #  Multi-stage build:
-#    Stage 1 (deps)  — install only production npm deps
-#    Stage 2 (final) — lean runtime image with Chrome
-#
-#  WhatsApp Note:
-#    The first run requires a QR code scan. Mount .wwebjs_auth/
-#    as a Docker volume so the session persists across restarts.
+#    Stage 1 (deps)  — install production npm deps without heavy chrome binaries
+#    Stage 2 (final) — lean production runtime with pre-configured Debian Chromium
 #
 #  Usage:
 #    docker build -t news-feeder-bot .
-#    docker-compose up -d
+#    docker compose up -d
 # ─────────────────────────────────────────────────────────
 
 # ── Stage 1: Install dependencies ────────────────────────
@@ -19,9 +15,13 @@ FROM node:22-bookworm-slim AS deps
 
 WORKDIR /app
 
+# Skip downloading bundled Chromium inside minimal build stage
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
 COPY package*.json ./
 
-# Install production deps only (puppeteer will download Chromium here)
+# Install production deps only
 RUN npm ci --omit=dev
 
 
@@ -29,58 +29,31 @@ RUN npm ci --omit=dev
 FROM node:22-bookworm-slim AS final
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV CHROME_PATH=/usr/bin/chromium
 
-# Install Chrome/Chromium runtime dependencies
-# These are needed by puppeteer's bundled Chromium to run
+# Install official Debian Chromium browser, fonts, and CA certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
+    chromium \
     fonts-liberation \
     fonts-noto-color-emoji \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libc6 \
-    libcairo2 \
-    libcups2 \
-    libdbus-1-3 \
-    libexpat1 \
-    libfontconfig1 \
-    libgbm1 \
-    libglib2.0-0 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libstdc++6 \
-    libx11-6 \
-    libx11-xcb1 \
-    libxcb1 \
-    libxcomposite1 \
-    libxcursor1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxi6 \
-    libxrandr2 \
-    libxrender1 \
-    libxss1 \
-    libxtst6 \
+    ca-certificates \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security (don't run as root)
+# Create non-root user for security
 RUN groupadd -r botuser && useradd -r -g botuser -d /app -s /sbin/nologin botuser
 
 WORKDIR /app
 
-# Copy installed node_modules from deps stage (includes puppeteer + Chromium)
+# Copy installed node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 
 # Copy application source
 COPY --chown=botuser:botuser . .
 
-# Create persistent data directories and set correct ownership
+# Create persistent data directories and set ownership
 RUN mkdir -p data/logs .wwebjs_auth .wwebjs_cache \
     && chown -R botuser:botuser data .wwebjs_auth .wwebjs_cache
 
@@ -91,7 +64,6 @@ USER botuser
 ENV NODE_ENV=production
 
 # Port for web dashboard + health check
-# Cloud platforms (Railway, Render, Fly.io) override this with their own PORT
 EXPOSE 3000
 
 # Health check — used by Docker and cloud platforms
