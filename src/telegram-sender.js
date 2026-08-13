@@ -185,6 +185,8 @@ class TelegramSender {
       }
       throw err;
     }
+  }
+
   /**
    * Send an audio file as a native playable Telegram Voice Note.
    * @param {string} audioPath - Path to local .mp3 or .ogg file
