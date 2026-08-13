@@ -8,13 +8,6 @@
       "enabled": true
     },
     {
-      "name": "HackRead",
-      "url": "https://hackread.com/",
-      "rss": "https://hackread.com/feed/",
-      "category": "🕵️ HackRead",
-      "enabled": true
-    },
-    {
       "name": "The Hacker News",
       "url": "https://thehackernews.com/",
       "rss": "https://feeds.feedburner.com/TheHackersNews",
@@ -27,11 +20,74 @@
       "rss": "https://www.bleepingcomputer.com/feed/",
       "category": "🖥️ BleepingComputer",
       "enabled": true
+    },
+    {
+      "name": "SecurityWeek",
+      "url": "https://www.securityweek.com/",
+      "rss": "https://www.securityweek.com/feed/",
+      "category": "🛡️ Vulnerabilities & 0-Days",
+      "enabled": true
+    },
+    {
+      "name": "CISA Advisories",
+      "url": "https://www.cisa.gov/",
+      "rss": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+      "category": "🏛️ CISA Advisories",
+      "enabled": true
+    },
+    {
+      "name": "Krebs on Security",
+      "url": "https://krebsonsecurity.com/",
+      "rss": "https://krebsonsecurity.com/feed/",
+      "category": "🕵️ Investigative Cybercrime",
+      "enabled": true
+    },
+    {
+      "name": "Dark Reading",
+      "url": "https://www.darkreading.com/",
+      "rss": "https://www.darkreading.com/rss.xml",
+      "category": "🔒 Enterprise Security",
+      "enabled": true
+    },
+    {
+      "name": "Unit 42 Threat Research",
+      "url": "https://unit42.paloaltonetworks.com/",
+      "rss": "https://unit42.paloaltonetworks.com/feed/",
+      "category": "🎯 Threat Intel & APTs",
+      "enabled": true
+    },
+    {
+      "name": "Microsoft Security Blog",
+      "url": "https://www.microsoft.com/en-us/security/blog/",
+      "rss": "https://www.microsoft.com/en-us/security/blog/feed/",
+      "category": "☁️ Cloud & OS Security",
+      "enabled": true
+    },
+    {
+      "name": "Cisco Talos Intelligence",
+      "url": "https://blog.talosintelligence.com/",
+      "rss": "https://blog.talosintelligence.com/rss/",
+      "category": "🔬 Vulnerability Research",
+      "enabled": true
+    },
+    {
+      "name": "Ars Technica Security",
+      "url": "https://arstechnica.com/security/",
+      "rss": "https://feeds.arstechnica.com/arstechnica/security",
+      "category": "⚡ Tech Security",
+      "enabled": true
+    },
+    {
+      "name": "Hacker News",
+      "url": "https://news.ycombinator.com/",
+      "rss": "https://news.ycombinator.com/rss",
+      "category": "🚀 Tech & Dev",
+      "enabled": true
     }
   ],
   "settings": {
     "pollIntervalMinutes": 5,
-    "maxArticlesPerRun": 5,
+    "maxArticlesPerRun": 6,
     "summaryBulletPoints": 3,
     "delayBetweenMessagesSec": 3,
     "healthCheckHour": 8,
@@ -50,12 +106,7 @@
     "_comment": "Daily digest bundles all daily articles into one message sent at sendAt time. Set enabled:true to activate. Individual article delivery is disabled while digest is on."
   },
   "routing": {
-    "_comment": "Optional: map source names to specific platform arrays. Leave empty object to broadcast all articles to all platforms.",
-    "_example_disabled": {
-      "BleepingComputer": ["whatsapp"],
-      "The Hacker News": ["telegram"],
-      "HackRead": ["whatsapp", "telegram", "discord"]
-    }
+    "_comment": "Optional: map source names to specific platform arrays. Leave empty object to broadcast all articles to all platforms."
   },
   "scoring": {
     "enabled": false,
@@ -72,6 +123,5 @@
       "privilege escalation", "worm", "critical patch"
     ],
     "_comment": "Articles whose title matches any severity keyword get a 🚨 CRITICAL ALERT badge."
-  },
-  "_addMoreSources": "Run 'npm run add-source' to interactively add a new news source, OR manually add an entry to the 'sources' array above following the same format."
+  }
 }

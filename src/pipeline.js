@@ -26,6 +26,7 @@ const { translateArticleData }                        = require('./translator');
 const { generateAudioSummary }                        = require('./audio-generator');
 const { generateAlertCard }                           = require('./card-generator');
 const { indexArticle }                                = require('./vector-store');
+const { clusterArticles, fuseStoryCluster }           = require('./story-clusterer');
 const Deduplicator                                    = require('./deduplicator');
 const logger                                          = require('./logger');
 
@@ -188,8 +189,22 @@ class NewsPipeline {
         return;
       }
 
-      const toSend = newArticles.slice(0, this.maxArticles);
-      logger.info(`${newArticles.length} new articles found — processing up to ${this.maxArticles}`);
+      // ── Step 4.5: Cross-Provider Semantic Clustering & Fusion ───────────
+      const { singleArticles, clusters } = clusterArticles(newArticles, 0.45);
+      const clusteredArticles = [...singleArticles];
+
+      for (const cluster of clusters) {
+        clusteredArticles.push(cluster.primaryArticle);
+        // Mark secondary source URLs as seen so they are never double-sent as duplicate alerts
+        if (cluster.memberArticles && cluster.memberArticles.length > 1) {
+          for (const member of cluster.memberArticles) {
+            this.deduplicator.markSeen(member.url, member.title, member.source);
+          }
+        }
+      }
+
+      const toSend = clusteredArticles.slice(0, this.maxArticles);
+      logger.info(`${clusteredArticles.length} unique stories queued — processing up to ${this.maxArticles}`);
 
       // ── Step 5: Parallel full-text extraction ────────────────────────────
       // I/O-bound: safe to run in parallel. Summarization stays sequential (quota).
