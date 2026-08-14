@@ -11,23 +11,54 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🔑 Set up SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.GCP_SSH_KEY }}
-
-      - name: 🌐 SSH to GCP and Redeploy
+      - name: 🌐 Setup SSH Key & Redeploy
         env:
           SSH_HOST: ${{ secrets.GCP_HOST }}
           SSH_USER: ${{ secrets.GCP_USERNAME }}
+          SSH_RAW_KEY: ${{ secrets.GCP_SSH_KEY }}
         run: |
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ] || [ -z "$SSH_RAW_KEY" ]; then
+            echo "❌ ERROR: One or more GitHub Secrets (GCP_HOST, GCP_USERNAME, GCP_SSH_KEY) are missing or empty."
+            exit 1
+          fi
+
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
+
+          # Decode Base64 or reconstruct PEM key structure
+          python3 - << 'PYEOF'
+          import os, base64
+
+          raw = os.environ.get("SSH_RAW_KEY", "").strip()
+
+          # If the secret is Base64 encoded, decode it
+          try:
+              decoded = base64.b64decode(raw).decode('utf-8', errors='ignore')
+              if "PRIVATE KEY" in decoded:
+                  raw = decoded
+          except Exception:
+              pass
+
+          # Replace literal '\n' characters and carriage returns
+          raw = raw.replace('\\n', '\n').replace('\r', '')
+
+          key_path = os.path.expanduser("~/.ssh/id_deploy")
+          with open(key_path, "w", encoding="utf-8") as f:
+              f.write(raw.strip() + "\n")
+          PYEOF
+
+          chmod 600 ~/.ssh/id_deploy
+
+          # Start ssh-agent and add key
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_deploy
+
+          # Add host key
           ssh-keyscan -H -p 22 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
           echo "🚀 Connecting to $SSH_USER@$SSH_HOST..."
 
-          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 "$SSH_USER@$SSH_HOST" bash -s << 'EOF'
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=25 "$SSH_USER@$SSH_HOST" bash -s << 'EOF'
             set -e
 
             # Locate news-feeder-bot directory
