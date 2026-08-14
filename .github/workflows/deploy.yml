@@ -25,36 +25,43 @@ jobs:
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          # Use Python to flawlessly normalize key line breaks (fixes 'error in libcrypto')
+          # Python PEM Auto-Reconstruction (fixes single-line browser paste & 64-char OpenSSL line wrapping)
           python3 - << 'PYEOF'
-          import os, base64
+          import os, base64, textwrap, re
 
           raw = os.environ.get("SSH_KEY", "").strip()
 
-          # If the secret is Base64 encoded, decode it
+          # If raw is a base64 encoded block, decode it first
           if "BEGIN" not in raw and "PRIVATE KEY" not in raw:
               try:
-                  decoded = base64.b64decode(raw).decode('utf-8')
-                  if "BEGIN" in decoded and "PRIVATE KEY" in decoded:
+                  decoded = base64.b64decode(raw).decode('utf-8', errors='ignore')
+                  if "BEGIN" in decoded:
                       raw = decoded
               except Exception:
                   pass
 
-          # Normalize literal '\n' characters into real newlines and strip carriage returns
+          # Replace literal '\n' characters
           raw = raw.replace('\\n', '\n').replace('\r', '')
+
+          # Parse PEM Header, Base64 Body, and Footer
+          match = re.search(r'(-----BEGIN [^-]+-----)(.*?)(-----END [^-]+-----)', raw, re.DOTALL)
+          if match:
+              header = match.group(1).strip()
+              # Strip all spaces and newlines from body to fix collapsed lines
+              body = "".join(match.group(2).split())
+              footer = match.group(3).strip()
+              # Re-wrap body into standard 64-character PEM lines for OpenSSL
+              wrapped_body = textwrap.fill(body, 64)
+              formatted_key = f"{header}\n{wrapped_body}\n{footer}\n"
+          else:
+              formatted_key = raw.strip() + "\n"
 
           key_path = os.path.expanduser("~/.ssh/deploy_key")
           with open(key_path, "w", encoding="utf-8") as f:
-              f.write(raw.strip() + "\n")
+              f.write(formatted_key)
           PYEOF
 
           chmod 600 ~/.ssh/deploy_key
-
-          # Verify key structure
-          echo "✅ Key header:"
-          head -n 1 ~/.ssh/deploy_key
-          echo "✅ Key footer:"
-          tail -n 1 ~/.ssh/deploy_key
 
           # Add remote host key to known_hosts
           ssh-keyscan -H -p 22 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
