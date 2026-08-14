@@ -3,7 +3,7 @@ name: 🚀 Auto-Deploy to GCP VM
 on:
   push:
     branches: [ master, main ]
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -25,15 +25,22 @@ jobs:
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          # Write private key (supports both standard PEM and Base64 encoded formats)
-          if echo "$SSH_KEY" | grep -q "PRIVATE KEY"; then
-            echo "$SSH_KEY" > ~/.ssh/deploy_key
-          else
-            echo "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key
+          # Write key preserving formatting
+          printf "%s\n" "$SSH_KEY" > ~/.ssh/deploy_key
+
+          # Check if secret is Base64 encoded and decode safely
+          if ! grep -qi "PRIVATE KEY" ~/.ssh/deploy_key; then
+            if echo "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key_b64 2>/dev/null; then
+              if grep -qi "PRIVATE KEY" ~/.ssh/deploy_key_b64; then
+                mv ~/.ssh/deploy_key_b64 ~/.ssh/deploy_key
+              else
+                rm -f ~/.ssh/deploy_key_b64
+              fi
+            fi
           fi
 
-          # Ensure trailing newline and strict permissions
-          sed -i -e '$a\' ~/.ssh/deploy_key
+          # Normalize newlines and set permissions
+          sed -i 's/\r$//' ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
           # Add remote host key to known_hosts
