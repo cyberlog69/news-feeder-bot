@@ -3,6 +3,7 @@ name: 🚀 Auto-Deploy to GCP VM
 on:
   push:
     branches: [ master, main ]
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
 
 jobs:
   deploy:
@@ -11,15 +12,39 @@ jobs:
 
     steps:
       - name: 🌐 SSH to GCP and Redeploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.GCP_HOST }}
-          username: ${{ secrets.GCP_USERNAME }}
-          key: ${{ secrets.GCP_SSH_KEY }}
-          port: 22
-          script_stop: true
-          script: |
-            # Find news-feeder-bot directory
+        env:
+          SSH_HOST: ${{ secrets.GCP_HOST }}
+          SSH_USER: ${{ secrets.GCP_USERNAME }}
+          SSH_KEY: ${{ secrets.GCP_SSH_KEY }}
+        run: |
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ] || [ -z "$SSH_KEY" ]; then
+            echo "❌ ERROR: One or more GitHub Secrets (GCP_HOST, GCP_USERNAME, GCP_SSH_KEY) are missing or empty."
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # Write private key (supports both standard PEM and Base64 encoded formats)
+          if echo "$SSH_KEY" | grep -q "PRIVATE KEY"; then
+            echo "$SSH_KEY" > ~/.ssh/deploy_key
+          else
+            echo "$SSH_KEY" | base64 -d > ~/.ssh/deploy_key
+          fi
+
+          # Ensure trailing newline and strict permissions
+          sed -i -e '$a\' ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Add remote host key to known_hosts
+          ssh-keyscan -H -p 22 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          echo "🚀 Connecting to $SSH_USER@$SSH_HOST..."
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$SSH_USER@$SSH_HOST" bash -s << 'EOF'
+            set -e
+
+            # Locate news-feeder-bot directory
             if [ -d "$HOME/news-feeder-bot" ]; then
               cd "$HOME/news-feeder-bot"
             elif [ -d "/opt/news-feeder-bot" ]; then
@@ -39,3 +64,4 @@ jobs:
 
             echo "✅ Deployment completed successfully!"
             docker compose ps
+          EOF
