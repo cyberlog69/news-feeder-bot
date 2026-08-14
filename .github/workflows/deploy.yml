@@ -1,0 +1,41 @@
+name: 🚀 Auto-Deploy to GCP VM
+
+on:
+  push:
+    branches: [ master, main ]
+
+jobs:
+  deploy:
+    name: Auto Deploy to GCP Compute Engine
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🌐 SSH to GCP and Redeploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USERNAME }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            # Find news-feeder-bot directory
+            if [ -d "$HOME/news-feeder-bot" ]; then
+              cd "$HOME/news-feeder-bot"
+            elif [ -d "/opt/news-feeder-bot" ]; then
+              cd "/opt/news-feeder-bot"
+            elif [ -d "news-feeder-bot" ]; then
+              cd "news-feeder-bot"
+            fi
+
+            echo "📦 Pulling latest changes from GitHub..."
+            git pull origin master || git pull origin main
+
+            echo "🔨 Rebuilding and restarting Docker container..."
+            docker compose up -d --build
+
+            echo "🧹 Cleaning up old dangling images..."
+            docker image prune -f
+
+            echo "✅ Deployment completed successfully!"
+            docker compose ps
