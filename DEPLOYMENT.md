@@ -137,12 +137,22 @@ sudo mkswap /swapfile
 sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
-# 3. Clone and Run
+# 3. Clone and Run with Docker Compose
 git clone https://github.com/cyberlog69/news-feeder-bot.git
 cd news-feeder-bot
 cp .env.example .env
-npm install --production
-npm run pm2:start
+nano .env  # Configure your credentials
+docker compose up -d --build
+
+### Automated Continuous Deployment (Vercel-style Auto-Deploy)
+To auto-deploy on every `git push origin master`:
+1. Generate an SSH key on your VM: `ssh-keygen -t ed25519 -f ~/.ssh/github_deploy -N "" -q <<< y`
+2. Add public key: `cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`
+3. Print base64 key: `base64 -w 0 ~/.ssh/github_deploy`
+4. In GitHub Repo **Settings → Secrets → Actions**, add:
+   - `GCP_HOST`: Your VM External IP or DuckDNS domain
+   - `GCP_USERNAME`: Your VM Linux user (`whoami`)
+   - `GCP_SSH_KEY`: The base64 key from step 3
 ```
 
 ### Option B: Google Cloud Run (Serverless Container)
