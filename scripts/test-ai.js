@@ -43,6 +43,42 @@ The vendor has released emergency security patches and strongly advises all admi
   url: 'https://example.com/test-ai-diagnostic-' + Date.now()
 };
 
+async function testGroqModelsEndpoint(apiKey) {
+  if (!apiKey) return;
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const chatModels = (data.data || []).map(m => m.id).filter(id => !id.includes('whisper') && !id.includes('guard'));
+      console.log(`🤖 Groq Live Models Available (${chatModels.length}): ${chatModels.slice(0, 5).join(', ')}…`);
+    } else {
+      console.log(`⚠️ Groq Key Validation: HTTP ${res.status} — ${data?.error?.message || 'Invalid key'}`);
+    }
+  } catch (err) {
+    console.log(`⚠️ Groq Connection: ${err.message}`);
+  }
+}
+
+async function testOpenRouterModelsEndpoint(apiKey) {
+  if (!apiKey) return;
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const freeModels = (data.data || []).map(m => m.id).filter(id => id.includes(':free'));
+      console.log(`🌐 OpenRouter Live Free Models (${freeModels.length}): ${freeModels.slice(0, 4).join(', ')}…`);
+    } else {
+      console.log(`⚠️ OpenRouter Key Validation: HTTP ${res.status} — ${data?.error?.message || 'Invalid key'}`);
+    }
+  } catch (err) {
+    console.log(`⚠️ OpenRouter Connection: ${err.message}`);
+  }
+}
+
 async function runDiagnostic() {
   console.log('\n═══════════════════════════════════════════════════════════');
   console.log('       🔍  NEWS FEEDER BOT — AI SUMMARIZER DIAGNOSTIC      ');
@@ -59,13 +95,18 @@ async function runDiagnostic() {
   
   if (geminiKey) {
     const isStandardGemini = geminiKey.startsWith('AIzaSy');
-    console.log(`🔑 GEMINI_API_KEY:       ✔ Configured (${geminiKey.slice(0, 8)}…) ${isStandardGemini ? '' : '⚠️ (Note: Gemini API keys usually start with AIzaSy... from aistudio.google.com)'}`);
+    console.log(`🔑 GEMINI_API_KEY:       ✔ Configured (${geminiKey.slice(0, 8)}…) ${isStandardGemini ? '' : '⚠️ (Gemini keys start with AIzaSy... from aistudio.google.com)'}`);
   } else {
     console.log(`🔑 GEMINI_API_KEY:       ❌ Not set`);
   }
 
   console.log(`🔑 OPENROUTER_API_KEY:   ${openrouterKey ? '✔ Configured (' + openrouterKey.slice(0, 8) + '…)' : '❌ Not set'}`);
   console.log(`🔑 HF_API_KEY:           ${hfKey ? '✔ Configured (' + hfKey.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log('───────────────────────────────────────────────────────────');
+
+  if (groqKey) await testGroqModelsEndpoint(groqKey);
+  if (openrouterKey) await testOpenRouterModelsEndpoint(openrouterKey);
+
   console.log('───────────────────────────────────────────────────────────\n');
 
   initSummarizer();
@@ -97,7 +138,7 @@ async function runDiagnostic() {
     if (result.aiUsed) {
       console.log('🎉 SUCCESS: AI Summarization is 100% operational and healthy!\n');
     } else {
-      console.log('⚠️ NOTE: Summarization fell back to extractive. Check key validity above.\n');
+      console.log('⚠️ NOTE: Summarization fell back to extractive. Review the diagnostics above.\n');
     }
   } catch (err) {
     console.error('\n❌ DIAGNOSTIC FAILED:', err.message);

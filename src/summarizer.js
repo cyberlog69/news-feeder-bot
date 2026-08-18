@@ -2,18 +2,15 @@
 //
 // Supported providers (set SUMMARIZER_PROVIDER in .env):
 //
-//   groq        — Groq Cloud API (RECOMMENDED free default)
-//                 Active Models: llama-3.3-70b-versatile, mixtral-8x7b-32768, gemma2-9b-it, deepseek-r1-distill-llama-70b
+//   groq        — Groq Cloud API (Auto-discovers all active models via API)
 //                 Free tier: 14,400 req/day, 30 RPM — very generous
 //                 Get key: https://console.groq.com (free, no CC needed)
 //
-//   gemini      — Google Gemini
-//                 Active Models: gemini-1.5-flash, gemini-2.0-flash, gemini-2.5-flash
-//                 Get key: https://aistudio.google.com/app/apikey (free AIzaSy... key)
-//
-//   openrouter  — OpenRouter (unified gateway to free models)
-//                 Active Models: meta-llama/llama-3.2-3b-instruct:free, mistral-small, gemini-2.0-flash-exp
+//   openrouter  — OpenRouter (Auto-discovers all active free models via API)
 //                 Get key: https://openrouter.ai (free)
+//
+//   gemini      — Google Gemini (Native REST)
+//                 Get key: https://aistudio.google.com/app/apikey (free AIzaSy... key)
 //
 //   ollama      — Local LLM via Ollama (100% free, runs on your machine)
 //                 Model: llama3.2 (default), mistral, phi3, gemma2, etc.
@@ -107,19 +104,34 @@ function formatBullets(rawText, bullets) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// PROVIDER IMPLEMENTATIONS
+// PROVIDER IMPLEMENTATIONS WITH DYNAMIC MODEL DISCOVERY
 // ═════════════════════════════════════════════════════════════════════════════
 
-// ── Groq ──────────────────────────────────────────────────────────────────────
+// ── Groq Model Discovery & Execution ──────────────────────────────────────────
 const GROQ_FALLBACK_MODELS = [
   process.env.GROQ_MODEL,
   'llama-3.3-70b-versatile',
   'mixtral-8x7b-32768',
   'gemma2-9b-it',
   'deepseek-r1-distill-llama-70b',
-  'qwen-2.5-32b',
   'llama-3.1-8b-instant'
 ].filter(Boolean);
+
+async function getAvailableGroqModels(apiKey) {
+  try {
+    const res = await fetchWithTimeout('https://api.groq.com/openai/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    }, 8000);
+    if (res.ok) {
+      const data = await res.json();
+      const ids = (data.data || [])
+        .map((m) => m.id)
+        .filter((id) => id && !id.includes('whisper') && !id.includes('guard'));
+      if (ids.length > 0) return ids;
+    }
+  } catch {}
+  return [];
+}
 
 async function callGroq(title, content, bullets) {
   const apiKey = (process.env.GROQ_API_KEY || '').trim();
@@ -127,8 +139,10 @@ async function callGroq(title, content, bullets) {
 
   await enforceRateLimit('groq');
 
+  const discovered = await getAvailableGroqModels(apiKey);
+  const modelsToTry = [...new Set([...(process.env.GROQ_MODEL ? [process.env.GROQ_MODEL] : []), ...discovered, ...GROQ_FALLBACK_MODELS])];
+
   let lastError = null;
-  const modelsToTry = [...new Set(GROQ_FALLBACK_MODELS)];
 
   for (const model of modelsToTry) {
     try {
@@ -153,7 +167,7 @@ async function callGroq(title, content, bullets) {
 
       if (!res.ok) {
         const errMsg = data?.error?.message || rawText || `HTTP ${res.status}`;
-        const isModelError = res.status === 404 ||
+        const isModelError = res.status === 404 || res.status === 400 ||
           /model_not_found|does not exist|decommissioned|no longer supported|deprecated|invalid_model/i.test(errMsg);
 
         if (isModelError) {
@@ -168,7 +182,7 @@ async function callGroq(title, content, bullets) {
       if (!raw) throw new Error('Groq returned empty response');
       return formatBullets(raw, bullets);
     } catch (err) {
-      if (/model_not_found|does not exist|404|decommissioned|no longer supported/i.test(err.message)) {
+      if (/model_not_found|does not exist|404|400|decommissioned|no longer supported/i.test(err.message)) {
         lastError = err;
         continue;
       }
@@ -179,81 +193,7 @@ async function callGroq(title, content, bullets) {
   throw lastError || new Error('All Groq models failed');
 }
 
-// ── Ollama (local) ────────────────────────────────────────────────────────────
-async function callOllama(title, content, bullets) {
-  const baseUrl = (process.env.OLLAMA_URL || 'http://localhost:11434').replace(/\/$/, '');
-  const model   = process.env.OLLAMA_MODEL || 'llama3.2';
-
-  await enforceRateLimit('ollama');
-
-  const res = await fetchWithTimeout(`${baseUrl}/api/generate`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      prompt: buildPrompt(title, content, bullets),
-      stream: false,
-      options: { temperature: 0.2, num_predict: 300 }
-    })
-  }, 60000);
-
-  const rawText = await res.text().catch(() => '');
-  if (!res.ok) throw new Error(`Ollama error: HTTP ${res.status} — ${rawText.slice(0, 200)}`);
-
-  let data = null;
-  try { data = JSON.parse(rawText); } catch {}
-  const raw = (data?.response || '').trim();
-  if (!raw) throw new Error('Ollama returned empty response');
-  return formatBullets(raw, bullets);
-}
-
-// ── Hugging Face Inference API ────────────────────────────────────────────────
-async function callHuggingFace(content, bullets, retryCount = 0) {
-  const apiKey = (process.env.HF_API_KEY || '').trim();
-  if (!apiKey) throw new Error('HF_API_KEY not set');
-
-  const model  = process.env.HF_MODEL || 'facebook/bart-large-cnn';
-  await enforceRateLimit('huggingface');
-
-  const input = `${content}`.slice(0, 1024);
-  const res = await fetchWithTimeout(`https://api-inference.huggingface.co/models/${model}`, {
-    method:  'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      inputs: input,
-      parameters: { max_length: 200, min_length: 60, do_sample: false }
-    })
-  }, 30000);
-
-  if (res.status === 503 && retryCount < 1) {
-    const data = await res.json().catch(() => ({}));
-    const wait = (data.estimated_time || 20) + 2;
-    logger.warn(`HuggingFace model loading — waiting ${Math.round(wait)}s...`);
-    await sleep(wait * 1000);
-    return callHuggingFace(content, bullets, retryCount + 1);
-  }
-
-  if (res.status === 503) {
-    throw new Error('HuggingFace model still loading after retry — skipping');
-  }
-
-  const rawText = await res.text().catch(() => '');
-  if (!res.ok) throw new Error(`HuggingFace API error: HTTP ${res.status} — ${rawText.slice(0, 200)}`);
-
-  let data = null;
-  try { data = JSON.parse(rawText); } catch {}
-  const summary = data?.[0]?.summary_text?.trim() || '';
-  if (!summary) throw new Error('HuggingFace returned empty response');
-
-  const sentences = summary
-    .split(/(?<=[.!?])\s+/)
-    .filter((s) => s.length > 20)
-    .slice(0, bullets);
-
-  return sentences.map((s) => `• ${s}`).join('\n');
-}
-
-// ── OpenRouter ────────────────────────────────────────────────────────────────
+// ── OpenRouter Model Discovery & Execution ────────────────────────────────────
 const OPENROUTER_FALLBACK_MODELS = [
   process.env.OPENROUTER_MODEL,
   'meta-llama/llama-3.2-3b-instruct:free',
@@ -262,9 +202,24 @@ const OPENROUTER_FALLBACK_MODELS = [
   'google/gemini-2.0-flash-exp:free',
   'google/gemini-2.0-flash-thinking-exp:free',
   'cognitivecomputations/dolphin3.0-r1-mistral-24b:free',
-  'deepseek/deepseek-chat:free',
-  'qwen/qwen-2.5-7b-instruct:free'
+  'deepseek/deepseek-chat:free'
 ].filter(Boolean);
+
+async function getAvailableOpenRouterModels(apiKey) {
+  try {
+    const res = await fetchWithTimeout('https://openrouter.ai/api/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    }, 8000);
+    if (res.ok) {
+      const data = await res.json();
+      const freeModels = (data.data || [])
+        .map((m) => m.id)
+        .filter((id) => id && id.includes(':free'));
+      if (freeModels.length > 0) return freeModels;
+    }
+  } catch {}
+  return [];
+}
 
 async function callOpenRouter(title, content, bullets) {
   const apiKey = (process.env.OPENROUTER_API_KEY || '').trim();
@@ -272,8 +227,10 @@ async function callOpenRouter(title, content, bullets) {
 
   await enforceRateLimit('openrouter');
 
+  const discovered = await getAvailableOpenRouterModels(apiKey);
+  const modelsToTry = [...new Set([...(process.env.OPENROUTER_MODEL ? [process.env.OPENROUTER_MODEL] : []), ...discovered, ...OPENROUTER_FALLBACK_MODELS])];
+
   let lastError = null;
-  const modelsToTry = [...new Set(OPENROUTER_FALLBACK_MODELS)];
 
   for (const model of modelsToTry) {
     try {
@@ -317,7 +274,7 @@ async function callOpenRouter(title, content, bullets) {
       if (!raw) throw new Error('OpenRouter returned empty response');
       return formatBullets(raw, bullets);
     } catch (err) {
-      if (/unavailable for free|not found|404|no endpoints/i.test(err.message)) {
+      if (/unavailable for free|not found|404|400|no endpoints/i.test(err.message)) {
         lastError = err;
         continue;
       }
@@ -394,6 +351,80 @@ async function callGemini(title, content, bullets) {
   throw lastError || new Error('All Gemini models failed');
 }
 
+// ── Ollama (local) ────────────────────────────────────────────────────────────
+async function callOllama(title, content, bullets) {
+  const baseUrl = (process.env.OLLAMA_URL || 'http://localhost:11434').replace(/\/$/, '');
+  const model   = process.env.OLLAMA_MODEL || 'llama3.2';
+
+  await enforceRateLimit('ollama');
+
+  const res = await fetchWithTimeout(`${baseUrl}/api/generate`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      prompt: buildPrompt(title, content, bullets),
+      stream: false,
+      options: { temperature: 0.2, num_predict: 300 }
+    })
+  }, 60000);
+
+  const rawText = await res.text().catch(() => '');
+  if (!res.ok) throw new Error(`Ollama error: HTTP ${res.status} — ${rawText.slice(0, 200)}`);
+
+  let data = null;
+  try { data = JSON.parse(rawText); } catch {}
+  const raw = (data?.response || '').trim();
+  if (!raw) throw new Error('Ollama returned empty response');
+  return formatBullets(raw, bullets);
+}
+
+// ── Hugging Face Inference API ────────────────────────────────────────────────
+async function callHuggingFace(content, bullets, retryCount = 0) {
+  const apiKey = (process.env.HF_API_KEY || '').trim();
+  if (!apiKey) throw new Error('HF_API_KEY not set');
+
+  const model  = process.env.HF_MODEL || 'facebook/bart-large-cnn';
+  await enforceRateLimit('huggingface');
+
+  const input = `${content}`.slice(0, 1024);
+  const res = await fetchWithTimeout(`https://api-inference.huggingface.co/models/${model}`, {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      inputs: input,
+      parameters: { max_length: 200, min_length: 60, do_sample: false }
+    })
+  }, 30000);
+
+  if (res.status === 503 && retryCount < 1) {
+    const data = await res.json().catch(() => ({}));
+    const wait = (data.estimated_time || 20) + 2;
+    logger.warn(`HuggingFace model loading — waiting ${Math.round(wait)}s...`);
+    await sleep(wait * 1000);
+    return callHuggingFace(content, bullets, retryCount + 1);
+  }
+
+  if (res.status === 503) {
+    throw new Error('HuggingFace model still loading after retry — skipping');
+  }
+
+  const rawText = await res.text().catch(() => '');
+  if (!res.ok) throw new Error(`HuggingFace API error: HTTP ${res.status} — ${rawText.slice(0, 200)}`);
+
+  let data = null;
+  try { data = JSON.parse(rawText); } catch {}
+  const summary = data?.[0]?.summary_text?.trim() || '';
+  if (!summary) throw new Error('HuggingFace returned empty response');
+
+  const sentences = summary
+    .split(/(?<=[.!?])\s+/)
+    .filter((s) => s.length > 20)
+    .slice(0, bullets);
+
+  return sentences.map((s) => `• ${s}`).join('\n');
+}
+
 // ── Extractive (no AI) ────────────────────────────────────────────────────────
 function extractive(content, title, bullets) {
   const text = content || title;
@@ -413,10 +444,10 @@ function extractive(content, title, bullets) {
 
 function initSummarizer() {
   const providerInfo = {
-    groq:        `Groq Cloud   (model: ${process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'})  — free 14,400 req/day`,
+    groq:        `Groq Cloud   (auto-discovering live models) — free 14,400 req/day`,
     ollama:      `Ollama Local (model: ${process.env.OLLAMA_MODEL || 'llama3.2'})  — unlimited, no API key`,
     huggingface: `HuggingFace  (model: ${process.env.HF_MODEL || 'facebook/bart-large-cnn'})  — free tier`,
-    openrouter:  `OpenRouter   (model: ${process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.2-3b-instruct:free'})`,
+    openrouter:  `OpenRouter   (auto-discovering live free models)`,
     gemini:      `Gemini       (model: ${process.env.GEMINI_MODEL || 'gemini-1.5-flash'})  — free tier`,
     extractive:  `Extractive   — no AI, no API key, always works`
   };
