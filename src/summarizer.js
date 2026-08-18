@@ -2,11 +2,11 @@
 //
 // Supported providers (set SUMMARIZER_PROVIDER in .env):
 //
-//   groq        — Groq Cloud API (Auto-discovers all active models via API)
+//   groq        — Groq Cloud API (Auto-discovers & prioritizes flagship chat models)
 //                 Free tier: 14,400 req/day, 30 RPM — very generous
 //                 Get key: https://console.groq.com (free, no CC needed)
 //
-//   openrouter  — OpenRouter (Auto-discovers all active free models via API)
+//   openrouter  — OpenRouter (Auto-discovers & prioritizes flagship free models)
 //                 Get key: https://openrouter.ai (free)
 //
 //   gemini      — Google Gemini (Native REST)
@@ -73,13 +73,12 @@ async function enforceRateLimit(providerName) {
 // ── Prompt builder ────────────────────────────────────────────────────────────
 function buildPrompt(title, content, bullets) {
   return (
-    `You are an executive news editor. Provide an engaging, professional summary of the article in exactly ${bullets} clear bullet points.\n\n` +
-    `Requirements:\n` +
-    `• Write in natural, flowing, human-readable sentences.\n` +
-    `• Summarize the core development, technical details or real-world impact, and key takeaways.\n` +
-    `• Do NOT include prefix labels like "Threat:", "Attack vector:", "Mitigation:", "Impact:", "Key Takeaway:", or "Point 1:".\n` +
-    `• Do NOT include markdown fences, intros, reasoning tokens, or conversational fluff.\n` +
-    `• Output strictly ${bullets} bullet points, each starting with "• ".\n\n` +
+    `Summarize this news article in exactly ${bullets} concise bullet points for a daily executive briefing.\n\n` +
+    `CRITICAL INSTRUCTIONS:\n` +
+    `1. Start your response directly with the first bullet point: "• "\n` +
+    `2. Do NOT write any introduction, thinking, planning, role description, or preamble (e.g. NEVER write "Analyze User Input:", "Role:", "Task:", or "Here is a summary:").\n` +
+    `3. Do NOT include category labels like "Threat:", "Impact:", or "Mitigation:".\n` +
+    `4. Write each bullet as a complete, informative, human-readable sentence.\n\n` +
     `<article_title>${title}</article_title>\n` +
     `<article_content>${content}</article_content>`
   );
@@ -87,49 +86,76 @@ function buildPrompt(title, content, bullets) {
 
 // ── Format raw LLM response into clean bullet points ──────────────────────────
 function formatBullets(rawText, bullets) {
-  // Strip chain-of-thought / reasoning blocks (e.g. DeepSeek / Qwen / Reasoning models <think>...</think>)
+  if (!rawText || typeof rawText !== 'string') return '';
+
+  // 1. Strip explicit chain-of-thought / reasoning XML tags (<think>...</think>, <reasoning>...</reasoning>)
   let cleaned = rawText
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
     .trim();
 
-  // If entire text was enclosed in unclosed <think> tag, strip opening tag and meta lines
   if (!cleaned && rawText.includes('<think>')) {
     cleaned = rawText.replace(/<think>/gi, '').trim();
   }
 
-  const lines = (cleaned || rawText)
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-    .filter((l) => !/^<think>|^<\/think>|^Here'?s a thinking process|^Analyze User Input|^Thinking Process/i.test(l))
-    .map((l) => {
-      // Remove leading bullets or numbered list items
-      let text = l.replace(/^[•▪\-*\d.]+\s*/, '').trim();
-      // Strip robotic prefix labels
-      text = text.replace(/^(Threat(\/CVE(\/affected systems)?)?|Attack vector(\/impact)?|Mitigation(\/patch status)?|Impact|Key Takeaway|Summary|Overview|Details|Observation):\s*/i, '');
-      return `• ${text}`;
-    })
-    .filter((l) => l.length > 15);
+  // 2. Parse lines and filter out meta-thinking / planning artifacts
+  const allLines = (cleaned || rawText).split('\n').map((l) => l.trim()).filter(Boolean);
+  const validBullets = [];
 
-  return lines.slice(0, bullets).join('\n');
+  for (const line of allLines) {
+    // Check if this line is an internal reasoning/planning artifact from the LLM
+    const isPlanningArtifact = /^(<think>|<\/think>|\*\*?(analyze|role|task|thinking|thought|input|guidelines|requirements|instructions|step \d|plan|objective|context|output format)\b|here'?s a (thinking|summary|breakdown)|let'?s (analyze|break down|summarize))/i.test(line);
+    if (isPlanningArtifact) continue;
+
+    // Strip leading bullets, dashes, or numbered lists
+    let text = line.replace(/^[•▪\-*\d.)\]]+\s*/, '').trim();
+
+    // Strip lingering robotic prompt prefixes
+    text = text.replace(/^(Threat(\/CVE(\/affected systems)?)?|Attack vector(\/impact)?|Mitigation(\/patch status)?|Impact|Key Takeaway|Summary|Overview|Details|Observation|Analysis|Context):\s*/i, '').trim();
+
+    // Skip markdown header-only lines like "**Comcast WiFi Motion Detection**"
+    if (/^\*\*[^*]+\*\*$/.test(text) && text.length < 50) continue;
+
+    // Remove bold asterisks from the start of the line if it was used as a pseudo-label
+    text = text.replace(/^\*\*[^*]+:\*\*\s*/i, '');
+
+    // Ensure it's a substantive sentence
+    if (text.length >= 25) {
+      validBullets.push(`• ${text}`);
+    }
+  }
+
+  // If we collected clean bullet points, return them
+  if (validBullets.length >= 1) {
+    return validBullets.slice(0, bullets).join('\n');
+  }
+
+  // Fallback: extract longest meaningful sentences from original text
+  const fallbackLines = (cleaned || rawText)
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.replace(/^[•▪\-*\d.]+\s*/, '').replace(/^\*\*|\*\*$/g, '').trim())
+    .filter((s) => s.length > 35 && !/^(analyze|role|task|thinking)/i.test(s));
+
+  if (fallbackLines.length > 0) {
+    return fallbackLines.slice(0, bullets).map((s) => `• ${s}`).join('\n');
+  }
+
+  return '';
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// PROVIDER IMPLEMENTATIONS WITH DYNAMIC MODEL DISCOVERY
+// PROVIDER IMPLEMENTATIONS WITH FILTERED & PRIORITIZED MODEL DISCOVERY
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ── Groq Model Discovery & Execution ──────────────────────────────────────────
 const GROQ_FALLBACK_MODELS = [
   process.env.GROQ_MODEL,
-  'openai/gpt-oss-120b',
-  'openai/gpt-oss-20b',
-  'qwen/qwen3.6-27b',
-  'allam-2-7b',
-  'canopylabs/orpheus-v1-english',
   'llama-3.3-70b-versatile',
+  'openai/gpt-oss-120b',
   'mixtral-8x7b-32768',
-  'gemma2-9b-it'
+  'gemma2-9b-it',
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.6-27b'
 ].filter(Boolean);
 
 async function getAvailableGroqModels(apiKey) {
@@ -137,12 +163,41 @@ async function getAvailableGroqModels(apiKey) {
     const res = await fetchWithTimeout('https://api.groq.com/openai/v1/models', {
       headers: { 'Authorization': `Bearer ${apiKey}` }
     }, 8000);
+
     if (res.ok) {
       const data = await res.json();
-      const ids = (data.data || [])
-        .map((m) => m.id)
-        .filter((id) => id && !id.includes('whisper') && !id.includes('guard'));
-      if (ids.length > 0) return ids;
+      const allIds = (data.data || []).map((m) => m.id);
+
+      // Exclude audio, moderation, Arabic-only, and non-text models
+      const filtered = allIds.filter((id) => {
+        if (!id) return false;
+        const lower = id.toLowerCase();
+        if (lower.includes('whisper') || lower.includes('guard') || lower.includes('orpheus') ||
+            lower.includes('allam') || lower.includes('embed') || lower.includes('vision') ||
+            lower.includes('tts') || lower.includes('audio') || lower.includes('distill-llama')) {
+          return false;
+        }
+        return true;
+      });
+
+      // Sort by best text summarization models first
+      filtered.sort((a, b) => {
+        const score = (id) => {
+          const lower = id.toLowerCase();
+          if (lower.includes('llama-3.3-70b')) return 100;
+          if (lower.includes('gpt-oss-120b')) return 90;
+          if (lower.includes('llama-3.1-70b')) return 80;
+          if (lower.includes('llama-3.1-8b')) return 70;
+          if (lower.includes('mixtral')) return 60;
+          if (lower.includes('gemma2')) return 50;
+          if (lower.includes('qwen3.6')) return 40;
+          if (lower.includes('gpt-oss-20b')) return 30;
+          return 10;
+        };
+        return score(b) - score(a);
+      });
+
+      if (filtered.length > 0) return filtered;
     }
   } catch {}
   return [];
@@ -167,10 +222,10 @@ async function callGroq(title, content, bullets) {
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: 'You are a concise news summarizer. Return only bullet points, no extra text.' },
+            { role: 'system', content: 'You are a direct news summarizer. Output only bullet points starting with "• ". Do NOT output thinking, planning, or role descriptions.' },
             { role: 'user',   content: buildPrompt(title, content, bullets) }
           ],
-          max_tokens:  500,
+          max_tokens:  600,
           temperature: 0.2,
           stream:      false
         })
@@ -196,7 +251,11 @@ async function callGroq(title, content, bullets) {
       const raw = data?.choices?.[0]?.message?.content?.trim() || '';
       if (!raw) throw new Error('Groq returned empty response');
       const formatted = formatBullets(raw, bullets);
-      if (!formatted) throw new Error('Formatted summary was empty');
+      if (!formatted) {
+        logger.warn(`Groq model "${model}" output could not be parsed as clean bullets — trying next model...`);
+        lastError = new Error(`Groq model ${model} output only reasoning metadata`);
+        continue;
+      }
       return formatted;
     } catch (err) {
       if (/model_not_found|does not exist|404|400|decommissioned|no longer supported/i.test(err.message)) {
@@ -213,8 +272,8 @@ async function callGroq(title, content, bullets) {
 // ── OpenRouter Model Discovery & Execution ────────────────────────────────────
 const OPENROUTER_FALLBACK_MODELS = [
   process.env.OPENROUTER_MODEL,
-  'liquid/lfm-2.5-2.6b:free',
   'nvidia/nemotron-3.5-lightning:free',
+  'liquid/lfm-2.5-2.6b:free',
   'dots-studio/dots-3-note-preview:free',
   'poolside/laguna-s-2.1:free',
   'meta-llama/llama-3.2-3b-instruct:free'
@@ -229,7 +288,22 @@ async function getAvailableOpenRouterModels(apiKey) {
       const data = await res.json();
       const freeModels = (data.data || [])
         .map((m) => m.id)
-        .filter((id) => id && id.includes(':free'));
+        .filter((id) => id && id.includes(':free') && !id.includes('whisper') && !id.includes('guard'));
+
+      // Sort by best chat instruction models
+      freeModels.sort((a, b) => {
+        const score = (id) => {
+          const lower = id.toLowerCase();
+          if (lower.includes('nemotron')) return 100;
+          if (lower.includes('gemini')) return 90;
+          if (lower.includes('mistral')) return 80;
+          if (lower.includes('llama-3.2')) return 70;
+          if (lower.includes('lfm')) return 60;
+          return 10;
+        };
+        return score(b) - score(a);
+      });
+
       if (freeModels.length > 0) return freeModels;
     }
   } catch {}
@@ -260,10 +334,10 @@ async function callOpenRouter(title, content, bullets) {
         body: JSON.stringify({
           model,
           messages: [
-            { role: 'system', content: 'You are a concise news summarizer. Return only bullet points.' },
+            { role: 'system', content: 'You are a direct news summarizer. Output only bullet points starting with "• ". Do NOT output thinking, planning, or role descriptions.' },
             { role: 'user',   content: buildPrompt(title, content, bullets) }
           ],
-          max_tokens:  500,
+          max_tokens:  600,
           temperature: 0.2
         })
       }, 30000);
@@ -288,7 +362,11 @@ async function callOpenRouter(title, content, bullets) {
       const raw = data?.choices?.[0]?.message?.content?.trim() || '';
       if (!raw) throw new Error('OpenRouter returned empty response');
       const formatted = formatBullets(raw, bullets);
-      if (!formatted) throw new Error('Formatted summary was empty');
+      if (!formatted) {
+        logger.warn(`OpenRouter model "${model}" output could not be parsed as clean bullets — trying next model...`);
+        lastError = new Error(`OpenRouter model ${model} output only reasoning metadata`);
+        continue;
+      }
       return formatted;
     } catch (err) {
       if (/unavailable for free|not found|404|400|no endpoints/i.test(err.message)) {
@@ -331,7 +409,7 @@ async function callGemini(title, content, bullets) {
             parts: [{ text: buildPrompt(title, content, bullets) }]
           }],
           generationConfig: {
-            maxOutputTokens: 500,
+            maxOutputTokens: 600,
             temperature: 0.2
           }
         })
@@ -384,7 +462,7 @@ async function callOllama(title, content, bullets) {
       model,
       prompt: buildPrompt(title, content, bullets),
       stream: false,
-      options: { temperature: 0.2, num_predict: 500 }
+      options: { temperature: 0.2, num_predict: 600 }
     })
   }, 60000);
 
@@ -463,10 +541,10 @@ function extractive(content, title, bullets) {
 
 function initSummarizer() {
   const providerInfo = {
-    groq:        `Groq Cloud   (auto-discovering live models) — free 14,400 req/day`,
+    groq:        `Groq Cloud   (prioritizing flagship models) — free 14,400 req/day`,
     ollama:      `Ollama Local (model: ${process.env.OLLAMA_MODEL || 'llama3.2'})  — unlimited, no API key`,
     huggingface: `HuggingFace  (model: ${process.env.HF_MODEL || 'facebook/bart-large-cnn'})  — free tier`,
-    openrouter:  `OpenRouter   (auto-discovering live free models)`,
+    openrouter:  `OpenRouter   (prioritizing flagship free models)`,
     gemini:      `Gemini       (model: ${process.env.GEMINI_MODEL || 'gemini-1.5-flash'})  — free tier`,
     extractive:  `Extractive   — no AI, no API key, always works`
   };
