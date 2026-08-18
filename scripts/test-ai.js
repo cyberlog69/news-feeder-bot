@@ -1,10 +1,38 @@
 // scripts/test-ai.js
-// Standalone diagnostic utility to test all configured AI summarizer providers.
-// Run with: npm run test-ai
+// Zero-dependency diagnostic utility to test all configured AI summarizer providers.
+// Run with: npm run test-ai  OR  docker compose exec news-feeder-bot npm run test-ai
 
-require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
+
+// Zero-dependency .env loader (works across all Node.js environments)
+function loadEnv() {
+  const envPath = path.join(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    if (typeof process.loadEnvFile === 'function') {
+      try { process.loadEnvFile(envPath); } catch {}
+    } else {
+      try {
+        const content = fs.readFileSync(envPath, 'utf-8');
+        content.split('\n').forEach((line) => {
+          const trimmed = line.trim();
+          if (trimmed && !trimmed.startsWith('#')) {
+            const eqIdx = trimmed.indexOf('=');
+            if (eqIdx > 0) {
+              const key = trimmed.slice(0, eqIdx).trim();
+              const val = trimmed.slice(eqIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+              if (!process.env[key]) process.env[key] = val;
+            }
+          }
+        });
+      } catch {}
+    }
+  }
+}
+
+loadEnv();
+
 const { summarizeArticle, initSummarizer } = require('../src/summarizer');
-const logger = require('../src/logger');
 
 const SAMPLE_ARTICLE = {
   title: 'Critical Zero-Day Vulnerability in Enterprise Gateways Actively Exploited in the Wild',
