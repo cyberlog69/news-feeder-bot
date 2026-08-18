@@ -1,11 +1,10 @@
 // scripts/test-ai.js
 // Zero-dependency diagnostic utility to test all configured AI summarizer providers.
-// Run with: npm run test-ai  OR  docker compose exec news-feeder-bot npm run test-ai
+// Run with: npm run test-ai
 
 const fs = require('fs');
 const path = require('path');
 
-// Zero-dependency .env loader (works across all Node.js environments)
 function loadEnv() {
   const envPath = path.join(process.cwd(), '.env');
   if (fs.existsSync(envPath)) {
@@ -50,11 +49,23 @@ async function runDiagnostic() {
   console.log('═══════════════════════════════════════════════════════════\n');
 
   const provider = (process.env.SUMMARIZER_PROVIDER || 'groq').toLowerCase().trim();
+  const groqKey = (process.env.GROQ_API_KEY || '').trim();
+  const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
+  const openrouterKey = (process.env.OPENROUTER_API_KEY || '').trim();
+  const hfKey = (process.env.HF_API_KEY || '').trim();
+
   console.log(`📌 Configured Provider:  ${provider.toUpperCase()}`);
-  console.log(`🔑 GROQ_API_KEY:         ${process.env.GROQ_API_KEY ? '✔ Configured (' + process.env.GROQ_API_KEY.slice(0, 8) + '…)' : '❌ Not set'}`);
-  console.log(`🔑 GEMINI_API_KEY:       ${process.env.GEMINI_API_KEY ? '✔ Configured (' + process.env.GEMINI_API_KEY.slice(0, 8) + '…)' : '❌ Not set'}`);
-  console.log(`🔑 OPENROUTER_API_KEY:   ${process.env.OPENROUTER_API_KEY ? '✔ Configured (' + process.env.OPENROUTER_API_KEY.slice(0, 8) + '…)' : '❌ Not set'}`);
-  console.log(`🔑 HF_API_KEY:           ${process.env.HF_API_KEY ? '✔ Configured (' + process.env.HF_API_KEY.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log(`🔑 GROQ_API_KEY:         ${groqKey ? '✔ Configured (' + groqKey.slice(0, 8) + '…)' : '❌ Not set'}`);
+  
+  if (geminiKey) {
+    const isStandardGemini = geminiKey.startsWith('AIzaSy');
+    console.log(`🔑 GEMINI_API_KEY:       ✔ Configured (${geminiKey.slice(0, 8)}…) ${isStandardGemini ? '' : '⚠️ (Note: Gemini API keys usually start with AIzaSy... from aistudio.google.com)'}`);
+  } else {
+    console.log(`🔑 GEMINI_API_KEY:       ❌ Not set`);
+  }
+
+  console.log(`🔑 OPENROUTER_API_KEY:   ${openrouterKey ? '✔ Configured (' + openrouterKey.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log(`🔑 HF_API_KEY:           ${hfKey ? '✔ Configured (' + hfKey.slice(0, 8) + '…)' : '❌ Not set'}`);
   console.log('───────────────────────────────────────────────────────────\n');
 
   initSummarizer();
@@ -86,7 +97,7 @@ async function runDiagnostic() {
     if (result.aiUsed) {
       console.log('🎉 SUCCESS: AI Summarization is 100% operational and healthy!\n');
     } else {
-      console.log('⚠️ NOTE: Summarization succeeded via extractive fallback. Check your API keys if you wish to use LLM synthesis.\n');
+      console.log('⚠️ NOTE: Summarization fell back to extractive. Check key validity above.\n');
     }
   } catch (err) {
     console.error('\n❌ DIAGNOSTIC FAILED:', err.message);
