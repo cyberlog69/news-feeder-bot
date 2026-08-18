@@ -24,6 +24,15 @@ test('PushSender - initializes with Ntfy configuration', async () => {
   assert.equal(sender.provider, 'ntfy');
 });
 
+test('PushSender - safely processes unicode smart quotes and emojis', async () => {
+  const sender = new PushSender({ provider: 'demo' });
+  await sender.initialize();
+  // Character 8217 is ’ (smart quote)
+  await assert.doesNotReject(async () => {
+    await sender.sendPush("Microsoft’s Latest Zero-Day Patch — Exploit Detected", "• Patch is available immediately.", "https://example.com", true);
+  });
+});
+
 test('WebhookSender - initializes with Outbound Webhook configuration', async () => {
   const sender = new WebhookSender('https://example.com/webhook', 'secret123');
   await sender.initialize();

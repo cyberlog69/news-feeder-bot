@@ -1,6 +1,6 @@
 // src/push-sender.js
 // Mobile Push Notification Sender (Pushover & Ntfy.sh)
-// Zero external dependencies — uses native fetch.
+// Zero external dependencies — uses native fetch with UTF-8 JSON payloads.
 
 const logger = require('./logger');
 
@@ -28,7 +28,7 @@ class PushSender {
   }
 
   /**
-   * Send push notification.
+   * Send generic message.
    * @param {string} message
    */
   async sendMessage(message) {
@@ -38,36 +38,44 @@ class PushSender {
 
   /**
    * Send notification for an article.
-   * @param {object} article
+   * @param {string} title
    * @param {string} summary
-   * @param {boolean} isCritical
+   * @param {string} [url='#']
+   * @param {boolean} [isCritical=false]
    */
   async sendPush(title, summary, url = '#', isCritical = false) {
     const cleanText = String(summary || '').replace(/<[^>]{0,500}>/g, '').slice(0, 1000);
+    const cleanTitle = String(title || 'News Alert').slice(0, 200);
 
     if (this.provider === 'ntfy' && this.topicUrl) {
-      // Ntfy.sh REST API
+      // Ntfy.sh JSON API: Prevents ByteString header conversion errors on Unicode/curly quotes (8217)
+      const payload = {
+        title: cleanTitle,
+        message: cleanText,
+        priority: isCritical ? 4 : 3,
+        tags: isCritical ? ['warning', 'rotating_light'] : ['newspaper'],
+        click: url
+      };
+
       const res = await fetchWithTimeout(this.topicUrl, {
         method: 'POST',
         headers: {
-          'Title': title.slice(0, 100),
-          'Priority': isCritical ? 'high' : 'default',
-          'Tags': isCritical ? 'warning,rotating_light' : 'newspaper',
-          'Click': url
+          'Content-Type': 'application/json'
         },
-        body: cleanText
+        body: JSON.stringify(payload)
       }, 8000);
 
       if (!res.ok) {
-        throw new Error(`Ntfy push failed: HTTP ${res.status}`);
+        const errText = await res.text().catch(() => '');
+        throw new Error(`Ntfy push failed: HTTP ${res.status} ${errText.slice(0, 100)}`);
       }
-      logger.success(`[Push:Ntfy] Notification sent: "${title.slice(0, 40)}…"`);
+      logger.success(`[Push:Ntfy] Notification sent: "${cleanTitle.slice(0, 40)}…"`);
     } else if (this.provider === 'pushover' && this.userKey && this.apiToken) {
-      // Pushover REST API
+      // Pushover REST API (form-urlencoded with UTF-8 encoding)
       const body = new URLSearchParams({
         token: this.apiToken,
         user: this.userKey,
-        title: title.slice(0, 100),
+        title: cleanTitle,
         message: cleanText,
         url: url,
         priority: isCritical ? '1' : '0'
@@ -79,11 +87,12 @@ class PushSender {
       }, 8000);
 
       if (!res.ok) {
-        throw new Error(`Pushover push failed: HTTP ${res.status}`);
+        const errText = await res.text().catch(() => '');
+        throw new Error(`Pushover push failed: HTTP ${res.status} ${errText.slice(0, 100)}`);
       }
-      logger.success(`[Push:Pushover] Notification sent: "${title.slice(0, 40)}…"`);
+      logger.success(`[Push:Pushover] Notification sent: "${cleanTitle.slice(0, 40)}…"`);
     } else {
-      logger.info(`[Push Demo] Notification: "${title}" -> ${cleanText.slice(0, 60)}…`);
+      logger.info(`[Push Demo] Notification: "${cleanTitle}" -> ${cleanText.slice(0, 60)}…`);
     }
   }
 }
