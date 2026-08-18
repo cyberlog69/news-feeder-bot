@@ -9,10 +9,10 @@
 //
 //   gemini      — Google Gemini
 //                 Default Model: gemini-2.5-flash (with auto-fallback to gemini-2.0-flash, gemini-1.5-flash)
-//                 Get key: https://aistudio.google.com (free)
+//                 Get key: https://aistudio.google.com/app/apikey (free AIzaSy... key)
 //
-//   openrouter  — OpenRouter (unified gateway to 100+ free models)
-//                 Default Model: meta-llama/llama-3.3-70b-instruct:free (with auto-fallback to active free tiers)
+//   openrouter  — OpenRouter (unified gateway to free models)
+//                 Default Model: google/gemini-2.0-flash-exp:free (with auto-fallback to active free tiers)
 //                 Get key: https://openrouter.ai (free)
 //
 //   ollama      — Local LLM via Ollama (100% free, runs on your machine)
@@ -29,15 +29,6 @@
 //                 Zero cost, zero latency, works offline, always available
 //
 // Auto-fallback chain: configured provider → alternate AI providers → extractive (never crashes)
-//
-// Features:
-//   ✔ Persistent summary cache (data/summary_cache.json) — survives restarts
-//   ✔ Per-provider rate limiting
-//   ✔ Auto model failover on 404/deprecation errors
-//   ✔ Retry on 429 / rate limit errors
-//   ✔ Prompt injection protection (XML delimiters)
-//   ✔ Input length caps
-//   ✔ Returns { summary, aiUsed, provider } for message labelling
 
 const fs     = require('fs');
 const path   = require('path');
@@ -120,21 +111,22 @@ function formatBullets(rawText, bullets) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// PROVIDER IMPLEMENTATIONS WITH AUTO MODEL FAILOVER
+// PROVIDER IMPLEMENTATIONS WITH AUTO MODEL FAILOVER & NATIVE REST
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ── Groq ──────────────────────────────────────────────────────────────────────
 const GROQ_FALLBACK_MODELS = [
   process.env.GROQ_MODEL,
   'llama-3.3-70b-versatile',
-  'llama-3.1-8b-instant',
   'llama3-8b-8192',
+  'llama3-70b-8192',
+  'llama-3.1-8b-instant',
   'gemma2-9b-it',
   'mixtral-8x7b-32768'
 ].filter(Boolean);
 
 async function callGroq(title, content, bullets) {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = (process.env.GROQ_API_KEY || '').trim();
   if (!apiKey) throw new Error('GROQ_API_KEY not set');
 
   await enforceRateLimit('groq');
@@ -159,22 +151,21 @@ async function callGroq(title, content, bullets) {
         })
       }, 20000);
 
-      if (res.status === 404 || res.status === 400) {
-        const body = await res.text().catch(() => '');
-        if (body.includes('model_not_found') || body.includes('does not exist') || res.status === 404) {
-          logger.warn(`Groq model "${model}" unavailable (${res.status}) — trying next fallback...`);
-          lastError = new Error(`Groq model ${model} unavailable: ${body}`);
-          continue;
-        }
-      }
+      const rawText = await res.text().catch(() => '');
+      let data = null;
+      try { data = JSON.parse(rawText); } catch {}
 
       if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(`Groq API error: HTTP ${res.status} — ${body.slice(0, 200)}`);
+        const errMsg = data?.error?.message || rawText || `HTTP ${res.status}`;
+        if (res.status === 404 || errMsg.includes('model_not_found') || errMsg.includes('does not exist')) {
+          logger.warn(`Groq model "${model}" unavailable (${res.status}) — trying next fallback...`);
+          lastError = new Error(`Groq model ${model} unavailable: ${errMsg}`);
+          continue;
+        }
+        throw new Error(`Groq API error: HTTP ${res.status} — ${errMsg.slice(0, 200)}`);
       }
 
-      const data = await res.json();
-      const raw  = data?.choices?.[0]?.message?.content?.trim() || '';
+      const raw = data?.choices?.[0]?.message?.content?.trim() || '';
       if (!raw) throw new Error('Groq returned empty response');
       return formatBullets(raw, bullets);
     } catch (err) {
@@ -207,20 +198,22 @@ async function callOllama(title, content, bullets) {
     })
   }, 60000);
 
+  const rawText = await res.text().catch(() => '');
+  let data = null;
+  try { data = JSON.parse(rawText); } catch {}
+
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Ollama error: HTTP ${res.status} — ${body.slice(0, 200)}`);
+    throw new Error(`Ollama error: HTTP ${res.status} — ${rawText.slice(0, 200)}`);
   }
 
-  const data = await res.json();
-  const raw  = (data?.response || '').trim();
+  const raw = (data?.response || '').trim();
   if (!raw) throw new Error('Ollama returned empty response');
   return formatBullets(raw, bullets);
 }
 
 // ── Hugging Face Inference API ────────────────────────────────────────────────
 async function callHuggingFace(content, bullets, retryCount = 0) {
-  const apiKey = process.env.HF_API_KEY;
+  const apiKey = (process.env.HF_API_KEY || '').trim();
   if (!apiKey) throw new Error('HF_API_KEY not set');
 
   const model  = process.env.HF_MODEL || 'facebook/bart-large-cnn';
@@ -250,12 +243,14 @@ async function callHuggingFace(content, bullets, retryCount = 0) {
     throw new Error('HuggingFace model still loading after retry — skipping');
   }
 
+  const rawText = await res.text().catch(() => '');
+  let data = null;
+  try { data = JSON.parse(rawText); } catch {}
+
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`HuggingFace API error: HTTP ${res.status} — ${body.slice(0, 200)}`);
+    throw new Error(`HuggingFace API error: HTTP ${res.status} — ${rawText.slice(0, 200)}`);
   }
 
-  const data    = await res.json();
   const summary = data?.[0]?.summary_text?.trim() || '';
   if (!summary) throw new Error('HuggingFace returned empty response');
 
@@ -270,15 +265,16 @@ async function callHuggingFace(content, bullets, retryCount = 0) {
 // ── OpenRouter ────────────────────────────────────────────────────────────────
 const OPENROUTER_FALLBACK_MODELS = [
   process.env.OPENROUTER_MODEL,
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'meta-llama/llama-3.1-8b-instruct:free',
   'google/gemini-2.0-flash-exp:free',
+  'google/gemma-2-9b-it:free',
   'mistralai/mistral-7b-instruct:free',
-  'qwen/qwen-2.5-72b-instruct:free'
+  'meta-llama/llama-3.2-3b-instruct:free',
+  'meta-llama/llama-3.2-1b-instruct:free',
+  'openchat/openchat-7b:free'
 ].filter(Boolean);
 
 async function callOpenRouter(title, content, bullets) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = (process.env.OPENROUTER_API_KEY || '').trim();
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
 
   await enforceRateLimit('openrouter');
@@ -307,22 +303,21 @@ async function callOpenRouter(title, content, bullets) {
         })
       }, 30000);
 
-      if (res.status === 404 || res.status === 400) {
-        const body = await res.text().catch(() => '');
-        if (body.includes('unavailable for free') || body.includes('not found') || res.status === 404) {
-          logger.warn(`OpenRouter model "${model}" unavailable (${res.status}) — trying fallback model...`);
-          lastError = new Error(`OpenRouter model ${model} unavailable: ${body}`);
-          continue;
-        }
-      }
+      const rawText = await res.text().catch(() => '');
+      let data = null;
+      try { data = JSON.parse(rawText); } catch {}
 
       if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(`OpenRouter API error: HTTP ${res.status} — ${body.slice(0, 200)}`);
+        const errMsg = data?.error?.message || rawText || `HTTP ${res.status}`;
+        if (res.status === 404 || errMsg.includes('unavailable for free') || errMsg.includes('not found')) {
+          logger.warn(`OpenRouter model "${model}" unavailable (${res.status}) — trying fallback model...`);
+          lastError = new Error(`OpenRouter model ${model} unavailable: ${errMsg}`);
+          continue;
+        }
+        throw new Error(`OpenRouter API error: HTTP ${res.status} — ${errMsg.slice(0, 200)}`);
       }
 
-      const data = await res.json();
-      const raw  = data?.choices?.[0]?.message?.content?.trim() || '';
+      const raw = data?.choices?.[0]?.message?.content?.trim() || '';
       if (!raw) throw new Error('OpenRouter returned empty response');
       return formatBullets(raw, bullets);
     } catch (err) {
@@ -337,7 +332,7 @@ async function callOpenRouter(title, content, bullets) {
   throw lastError || new Error('All OpenRouter free models failed');
 }
 
-// ── Gemini ────────────────────────────────────────────────────────────────────
+// ── Gemini (Native REST — Zero External Dependencies) ─────────────────────────
 const GEMINI_FALLBACK_MODELS = [
   process.env.GEMINI_MODEL,
   'gemini-2.5-flash',
@@ -348,11 +343,9 @@ const GEMINI_FALLBACK_MODELS = [
 ].filter(Boolean);
 
 async function callGemini(title, content, bullets) {
-  const { GoogleGenerativeAI } = require('@google/generative-ai');
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
-  const genAI = new GoogleGenerativeAI(apiKey);
   await enforceRateLimit('gemini');
 
   let lastError = null;
@@ -360,14 +353,40 @@ async function callGemini(title, content, bullets) {
 
   for (const modelName of modelsToTry) {
     try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(buildPrompt(title, content, bullets));
-      const raw    = result.response.text().trim();
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const res = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: buildPrompt(title, content, bullets) }]
+          }],
+          generationConfig: {
+            maxOutputTokens: 300,
+            temperature: 0.2
+          }
+        })
+      }, 25000);
+
+      const rawText = await res.text().catch(() => '');
+      let data = null;
+      try { data = JSON.parse(rawText); } catch {}
+
+      if (!res.ok) {
+        const errMsg = data?.error?.message || rawText || `HTTP ${res.status}`;
+        if (res.status === 404 || /not found|no longer available|is not supported/i.test(errMsg)) {
+          logger.warn(`Gemini model "${modelName}" unavailable — trying next fallback model...`);
+          lastError = new Error(`Gemini model ${modelName} unavailable: ${errMsg}`);
+          continue;
+        }
+        throw new Error(`Gemini API error: HTTP ${res.status} — ${errMsg.slice(0, 200)}`);
+      }
+
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
       if (!raw) throw new Error('Gemini returned empty response');
       return formatBullets(raw, bullets);
     } catch (err) {
       if (/404|no longer available|not found|is not supported/i.test(err.message)) {
-        logger.warn(`Gemini model "${modelName}" unavailable — trying next fallback model...`);
         lastError = err;
         continue;
       }
@@ -404,7 +423,7 @@ function initSummarizer() {
     groq:        `Groq Cloud   (model: ${process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'})  — free 14,400 req/day`,
     ollama:      `Ollama Local (model: ${process.env.OLLAMA_MODEL || 'llama3.2'})  — unlimited, no API key`,
     huggingface: `HuggingFace  (model: ${process.env.HF_MODEL || 'facebook/bart-large-cnn'})  — free tier`,
-    openrouter:  `OpenRouter   (model: ${process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free'})`,
+    openrouter:  `OpenRouter   (model: ${process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-exp:free'})`,
     gemini:      `Gemini       (model: ${process.env.GEMINI_MODEL || 'gemini-2.5-flash'})  — free tier`,
     extractive:  `Extractive   — no AI, no API key, always works`
   };
