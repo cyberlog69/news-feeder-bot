@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📰 News Feeder Bot v3.14.0
+# 📰 News Feeder Bot v3.15.0
 
 ### Autonomous Cybersecurity & Tech Intelligence Platform — Delivered Across 9 Platforms
 #### Threat Intel (CVE/EPSS/IOC/MITRE) · Multi-Language Translation · TTS Voice Summaries · RAG Conversational AI (`/ask`) · RSS Feed Health · 0 Audit Vulnerabilities
@@ -17,10 +17,12 @@
 
 ## 📌 Table of Contents
 
-- [What's New in v3.14.0](#-whats-new-in-v3140)
+- [What's New in v3.15.0](#-whats-new-in-v3150)
 - [Features](#-features)
 - [Supported Delivery Channels](#-supported-delivery-channels)
 - [Quick Start](#-quick-start)
+- [1-Click Cloud Connect (`connect-gcp.bat`)](#-1-click-cloud-connect)
+- [AI Summarizer & Live Diagnostics (`npm run test-ai`)](#-ai-summarizer--live-diagnostics)
 - [RAG & Conversational AI (`/ask`)](#-rag--conversational-ai-ask-your-news)
 - [Deep Threat Intelligence](#-deep-threat-intelligence)
 - [Multi-Language & Internationalization](#-multi-language--internationalization)
@@ -37,10 +39,14 @@
 
 ---
 
-## 🆕 What's New in v3.14.0
+## 🆕 What's New in v3.15.0
 
 | Module | Details |
 |---|---|
+| ⚡ **1-Click GCP VM Connect (`connect-gcp.bat`)** | Native double-clickable Windows batch script that securely connects directly to your Google Cloud VM (`newsfeedrvm`) with automatic Google Cloud key management, zone resolution (`us-east1-c`), and dynamic IP auto-discovery. |
+| 🔍 **AI Summarizer Diagnostic Suite (`npm run test-ai`)** | Zero-dependency real-time diagnostic CLI verifying active LLM API keys (`Groq`, `Gemini`, `OpenRouter`), querying live `/models` endpoints, measuring synthesis latency (ms), and testing end-to-end natural summary synthesis. |
+| 🤖 **Dynamic Real-Time Model Discovery & Reasoning Filter** | Auto-queries provider `/models` endpoints on Groq & OpenRouter to prioritize flagship chat models (`llama-3.3-70b-versatile`, `gemini-1.5-flash`), eliminating 404 deprecations. Automatically strips chain-of-thought `<think>` tags and planning artifacts. |
+| 🌐 **Zero-Dependency Native Gemini REST** | Migrated Google Gemini to native REST `fetch`, allowing zero-dependency LLM synthesis across host VMs and Docker containers alike without requiring heavy native SDKs. |
 | 🛡️ **Enterprise Security & SIEM Audit** | Role-Based Access Control (RBAC) with constant-time token validation (`admin`, `analyst`, `auditor`), sliding-window IP rate limiting, ArcSight CEF & Elastic ECS audit log exporter (`/api/audit-log`), and automated SQLite backup & VACUUM engine (`/api/db/backup`). |
 | 🌐 **Social & Public Syndication** | Broadcasts critical security alerts to Mastodon/Fediverse and Bluesky (AT Protocol). Exposes public syndication endpoints: RSS 2.0 (`/feed.xml`), Atom 1.0 (`/atom.xml`), and JSON Feed 1.1 (`/feed.json`). |
 | 📑 **Executive CISO Briefings** | Generates strategic CISO executive intelligence reports in Markdown and print/PDF-ready HTML summarizing active CISA KEV zero-days, dark web ransomware disclosures, and tactical recommendations via `/briefing` or `GET /api/ciso-briefing`. |
@@ -49,12 +55,7 @@
 | 📰 **AI Story Clustering & Master Bulletins** | Automatically identifies overlapping breaking news coverage across multiple feeds using Cosine Similarity on term-frequency vectors and shared CVEs. Merges facts into a single consolidated **Master Bulletin** citing all sources. |
 | 🏴‍☠️ **Live Ransomware & CISA KEV Tracker** | Ingests real-time victim disclosures from dark web ransomware leak portals (LockBit, RansomHub, BlackCat, Akira, Play). Syncs CISA's official *Known Exploited Vulnerabilities* (KEV) catalog with SQLite persistence and warning badges. |
 | 🧠 **RAG & Conversational AI (`/ask`)** | Ask natural language questions via `/ask <question>`. Searches historical news in SQLite using term-frequency vector embeddings and Cosine Similarity, generating cited AI responses. |
-| 🛡️ **Deep Threat Intelligence** | Auto-enriches security news with CVE details, FIRST.org EPSS exploit probabilities, IOC extraction (IPs, hashes, defanged domains), and MITRE ATT&CK mapping. |
-| 🌍 **Multi-Language Translation** | Translate news summaries on the fly per platform (`TELEGRAM_LANGUAGE=es`, `DISCORD_LANGUAGE=de`). Supports 13+ languages with SQLite translation caching. |
-| 🔊 **Audio & Multimedia** | Text-to-Speech narrative summaries, native **Telegram Voice Notes**, and dynamic SVG visual alert cards for critical zero-day news. |
-| 📧 **9 Delivery Channels** | WhatsApp, Telegram, Discord, Google Chat, Slack, MS Teams, HTML Email Newsletters, Mobile Push (Pushover/Ntfy.sh), and Outbound SOAR/SIEM Webhooks. |
-| 🎛️ **Feed Health & Admin UI** | RSS Feed Health Index tracking latency (ms), HTTP status, and error counts. Visual Feed Manager REST APIs (`/api/sources`) to add/toggle feeds without manual config edits. |
-| 🧪 **54/54 Unit Tests** | Automated Node.js native test suite (`npm test`) covering RBAC Security, Rate Limiting, SIEM CEF Logging, DB Maintenance, Social Media, Syndication Feeds, CISO Briefings, SOC Dashboard APIs, Subscriptions, Story Clustering, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
+| 🧪 **55/55 Unit Tests** | Automated Node.js native test suite (`npm test`) covering RBAC Security, Rate Limiting, SIEM CEF Logging, DB Maintenance, Social Media, Syndication Feeds, CISO Briefings, SOC Dashboard APIs, Subscriptions, Story Clustering, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
 
 ---
 
@@ -122,6 +123,32 @@ npm install
 cp .env.example .env
 npm start
 ```
+
+---
+
+## ⚡ 1-Click Cloud Connect (`connect-gcp.bat`)
+
+Connect directly to your GCP Compute Engine VM (`newsfeedrvm`) from Windows in **1 double-click**:
+
+* **Double-click `connect-gcp.bat`** in File Explorer.
+* Automatically uses Google Cloud key management, resolves zone (`us-east1-c`), and handles dynamic/ephemeral IP rotations automatically.
+* You can right-click `connect-gcp.bat` → **Send to Desktop (create shortcut)** for instant access anytime.
+
+---
+
+## 🧪 AI Summarizer & Live Diagnostics (`npm run test-ai`)
+
+Test all your configured LLM API keys and model availability in real time:
+
+```bash
+npm run test-ai
+```
+
+### What It Tests:
+- 🔑 **API Key Validation**: Verifies detected keys for **Groq**, **Google Gemini**, **OpenRouter**, and **HuggingFace**.
+- 🤖 **Dynamic Model Discovery**: Queries live `/models` endpoints in real time to discover currently active production models.
+- ⚡ **Latency Benchmark**: Measures live LLM inference execution time in milliseconds.
+- 📝 **Natural Executive Summary**: Validates clean, human-readable 3-bullet output with chain-of-thought `<think>` tags and planning artifacts automatically stripped.
 
 ---
 
@@ -301,6 +328,7 @@ The Web Dashboard listens on `http://localhost:3000`:
 ```bash
 npm start                # Launch News Feeder Bot
 npm test                 # Run native unit test suite (--test-concurrency=1)
+npm run test-ai          # Live AI summarizer and LLM model diagnostic suite
 npm run add-source       # Interactively add RSS source feed
 npm run list-groups      # Discover WhatsApp group IDs
 npm run list-telegram-chats # Discover Telegram chat IDs
@@ -319,7 +347,7 @@ Run the Node.js native test suite:
 npm test
 ```
 
-### Test Suite Breakdown (54/54 Passed)
+### Test Suite Breakdown (55/55 Passed)
 - `test/enterprise-security.test.js` — RBAC token validation, sliding-window rate limiting, CEF/ECS audit logging & DB maintenance
 - `test/social-broadcast.test.js` — Mastodon/Bluesky broadcasters and public RSS/Atom/JSON feed generators
 - `test/ciso-briefing.test.js` — Executive CISO threat briefing generator (Markdown & print/PDF HTML)

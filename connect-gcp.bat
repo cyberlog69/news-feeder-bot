@@ -4,51 +4,23 @@
 ::  Connects directly to praveenkumarkp332@newsfeedrvm in us-east1-c
 :: ============================================================================
 
-title GCP VM - newsfeedrvm (News Feeder Bot)
+title GCP VM - newsfeedrvm
 color 0A
 
-:: ── CONFIGURATION ────────────────────────────────────────────────────────────
 set "VM_NAME=newsfeedrvm"
 set "GCP_USER=praveenkumarkp332"
 set "ZONE=us-east1-c"
-:: ─────────────────────────────────────────────────────────────────────────────
 
 cls
 echo ================================================================
-echo      CONNECTING TO GOOGLE CLOUD VM (%GCP_USER%@%VM_NAME%)       
+echo      CONNECTING TO GOOGLE CLOUD VM: %GCP_USER%@%VM_NAME%
 echo ================================================================
 echo.
-
-:: ── Strategy 1: Native gcloud compute ssh (MUST USE 'call' IN BATCH) ─────────
-where gcloud >nul 2>nul
-if %ERRORLEVEL% equ 0 (
-    echo [i] Google Cloud CLI detected.
-    echo [^>] Connecting to %GCP_USER%@%VM_NAME% (%ZONE%)...
-    echo.
-    call gcloud compute ssh %GCP_USER%@%VM_NAME% --zone=%ZONE%
-    goto :done
-)
-
-:: ── Strategy 2: Direct OpenSSH fallback ──────────────────────────────────────
-echo [!] gcloud CLI not found. Using OpenSSH fallback...
-set "GCP_IP=35.229.60.152"
-
-:: Auto-detect Google Cloud or standard SSH keys
-set "KEY_FLAG="
-if exist "%USERPROFILE%\.ssh\google_compute_engine" (
-    set "KEY_FLAG=-i %USERPROFILE%\.ssh\google_compute_engine"
-) else if exist "%USERPROFILE%\.ssh\id_ed25519" (
-    set "KEY_FLAG=-i %USERPROFILE%\.ssh\id_ed25519"
-) else if exist "%USERPROFILE%\.ssh\id_rsa" (
-    set "KEY_FLAG=-i %USERPROFILE%\.ssh\id_rsa"
-)
-
-echo [v] Connecting via OpenSSH to %GCP_USER%@%GCP_IP%...
+echo [i] Launching secure Google Cloud connection in zone %ZONE%...
 echo.
 
-ssh -o StrictHostKeyChecking=accept-new %KEY_FLAG% %GCP_USER%@%GCP_IP%
+call gcloud compute ssh %GCP_USER%@%VM_NAME% --zone=%ZONE%
 
-:done
 echo.
 echo ================================================================
 echo  SSH session ended. Press any key to close this window.
