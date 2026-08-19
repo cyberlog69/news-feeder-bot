@@ -2,28 +2,34 @@
 //
 // Supported providers (set SUMMARIZER_PROVIDER in .env):
 //
-//   groq        — Groq Cloud API (Auto-discovers & prioritizes flagship chat models)
-//                 Free tier: 14,400 req/day, 30 RPM — very generous
-//                 Get key: https://console.groq.com (free, no CC needed)
+//   groq        — Groq Cloud API (14,400 free req/day, ultra-fast LPU inference)
+//                 Get key: https://console.groq.com/keys
 //
-//   openrouter  — OpenRouter (Auto-discovers & prioritizes flagship free models)
-//                 Get key: https://openrouter.ai (free)
+//   gemini      — Google Gemini (1,500 free req/day, deep comprehension, native REST)
+//                 Get key: https://aistudio.google.com/app/apikey
 //
-//   gemini      — Google Gemini (Native REST)
-//                 Get key: https://aistudio.google.com/app/apikey (free AIzaSy... key)
+//   cerebras    — Cerebras Cloud (1,000,000 free tokens/day, world's fastest AI chip)
+//                 Get key: https://cloud.cerebras.ai
 //
-//   ollama      — Local LLM via Ollama (100% free, runs on your machine)
-//                 Model: llama3.2 (default), mistral, phi3, gemma2, etc.
-//                 No API key, no rate limits, full privacy
+//   mistral     — Mistral AI (Free experimentation tier, premier European models)
+//                 Get key: https://console.mistral.ai
+//
+//   cohere      — Cohere (1,000 free calls/month, purpose-built summarizer)
+//                 Get key: https://dashboard.cohere.com/api-keys
+//
+//   cloudflare  — Cloudflare Workers AI (10,000 free neurons/day on global edge)
+//                 Get token: https://dash.cloudflare.com
+//
+//   openrouter  — OpenRouter (Unified gateway with auto-discovered free models)
+//                 Get key: https://openrouter.ai
+//
+//   huggingface — Hugging Face Inference API (facebook/bart-large-cnn)
+//                 Get key: https://huggingface.co/settings/tokens
+//
+//   ollama      — Local LLM via Ollama (100% free, unlimited, zero external network)
 //                 Install: https://ollama.com
 //
-//   huggingface — Hugging Face Inference API
-//                 Model: facebook/bart-large-cnn (specialized for summarization)
-//                 Free tier: limited RPM, may have cold-start delays
-//                 Get key: https://huggingface.co/settings/tokens (free)
-//
-//   extractive  — No AI — extracts top sentences directly from text
-//                 Zero cost, zero latency, works offline, always available
+//   extractive  — No AI — deterministic NLP sentence extraction (instant, offline)
 
 const fs     = require('fs');
 const path   = require('path');
@@ -51,12 +57,16 @@ function saveSummaryCache(url, summary) {
 
 // ── Rate limiter (per-provider gaps) ─────────────────────────────────────────
 const RATE_LIMITS = {
-  groq:        2500,   // 30 RPM free → 2.5s gap
-  ollama:      0,      // local — no limit
-  huggingface: 7000,   // conservative for free tier
-  openrouter:  3000,   // free models vary
-  gemini:      3000,   // flash free tier
-  extractive:  0       // no API
+  cerebras:    1000,   // ~60 RPM free tier
+  groq:        2000,   // 30 RPM free tier
+  gemini:      3000,   // 15 RPM free tier
+  mistral:     1500,   // 1 RPS free experimentation tier
+  cohere:      3000,   // 20 RPM free tier
+  cloudflare:  1000,   // 10,000 neurons/day
+  openrouter:  3000,   // free tier
+  huggingface: 7000,   // free tier
+  ollama:      0,      // local
+  extractive:  0       // local
 };
 
 let lastCallAt = 0;
@@ -103,7 +113,6 @@ function formatBullets(rawText, bullets) {
   const validBullets = [];
 
   for (const line of allLines) {
-    // Check if this line is an internal reasoning/planning artifact from the LLM
     const isPlanningArtifact = /^(<think>|<\/think>|\*\*?(analyze|role|task|thinking|thought|input|guidelines|requirements|instructions|step \d|plan|objective|context|output format)\b|here'?s a (thinking|summary|breakdown)|let'?s (analyze|break down|summarize))/i.test(line);
     if (isPlanningArtifact) continue;
 
@@ -125,7 +134,6 @@ function formatBullets(rawText, bullets) {
     }
   }
 
-  // If we collected clean bullet points, return them
   if (validBullets.length >= 1) {
     return validBullets.slice(0, bullets).join('\n');
   }
@@ -144,10 +152,10 @@ function formatBullets(rawText, bullets) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// PROVIDER IMPLEMENTATIONS WITH FILTERED & PRIORITIZED MODEL DISCOVERY
+// TOP 6 FREE AI PROVIDER IMPLEMENTATIONS
 // ═════════════════════════════════════════════════════════════════════════════
 
-// ── Groq Model Discovery & Execution ──────────────────────────────────────────
+// ── 1. Groq Cloud (14,400 req/day free) ────────────────────────────────────────
 const GROQ_FALLBACK_MODELS = [
   process.env.GROQ_MODEL,
   'llama-3.3-70b-versatile',
@@ -168,19 +176,14 @@ async function getAvailableGroqModels(apiKey) {
       const data = await res.json();
       const allIds = (data.data || []).map((m) => m.id);
 
-      // Exclude audio, moderation, Arabic-only, and non-text models
       const filtered = allIds.filter((id) => {
         if (!id) return false;
         const lower = id.toLowerCase();
-        if (lower.includes('whisper') || lower.includes('guard') || lower.includes('orpheus') ||
-            lower.includes('allam') || lower.includes('embed') || lower.includes('vision') ||
-            lower.includes('tts') || lower.includes('audio') || lower.includes('distill-llama')) {
-          return false;
-        }
-        return true;
+        return !(lower.includes('whisper') || lower.includes('guard') || lower.includes('orpheus') ||
+                 lower.includes('allam') || lower.includes('embed') || lower.includes('vision') ||
+                 lower.includes('tts') || lower.includes('audio') || lower.includes('distill-llama'));
       });
 
-      // Sort by best text summarization models first
       filtered.sort((a, b) => {
         const score = (id) => {
           const lower = id.toLowerCase();
@@ -191,7 +194,6 @@ async function getAvailableGroqModels(apiKey) {
           if (lower.includes('mixtral')) return 60;
           if (lower.includes('gemma2')) return 50;
           if (lower.includes('qwen3.6')) return 40;
-          if (lower.includes('gpt-oss-20b')) return 30;
           return 10;
         };
         return score(b) - score(a);
@@ -237,10 +239,7 @@ async function callGroq(title, content, bullets) {
 
       if (!res.ok) {
         const errMsg = data?.error?.message || rawText || `HTTP ${res.status}`;
-        const isModelError = res.status === 404 || res.status === 400 ||
-          /model_not_found|does not exist|decommissioned|no longer supported|deprecated|invalid_model/i.test(errMsg);
-
-        if (isModelError) {
+        if (res.status === 404 || res.status === 400 || /model_not_found|does not exist|decommissioned|no longer supported|deprecated|invalid_model/i.test(errMsg)) {
           logger.warn(`Groq model "${model}" unavailable (${res.status}) — trying next fallback...`);
           lastError = new Error(`Groq model ${model} unavailable: ${errMsg}`);
           continue;
@@ -252,8 +251,7 @@ async function callGroq(title, content, bullets) {
       if (!raw) throw new Error('Groq returned empty response');
       const formatted = formatBullets(raw, bullets);
       if (!formatted) {
-        logger.warn(`Groq model "${model}" output could not be parsed as clean bullets — trying next model...`);
-        lastError = new Error(`Groq model ${model} output only reasoning metadata`);
+        lastError = new Error(`Groq model ${model} produced empty formatted summary`);
         continue;
       }
       return formatted;
@@ -269,7 +267,328 @@ async function callGroq(title, content, bullets) {
   throw lastError || new Error('All Groq models failed');
 }
 
-// ── OpenRouter Model Discovery & Execution ────────────────────────────────────
+// ── 2. Google Gemini (1,500 req/day free — Native REST) ────────────────────────
+const GEMINI_FALLBACK_MODELS = [
+  process.env.GEMINI_MODEL,
+  'gemini-1.5-flash',
+  'gemini-2.0-flash',
+  'gemini-2.5-flash',
+  'gemini-1.5-pro'
+].filter(Boolean);
+
+async function callGemini(title, content, bullets) {
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+
+  await enforceRateLimit('gemini');
+
+  let lastError = null;
+  const modelsToTry = [...new Set(GEMINI_FALLBACK_MODELS)];
+
+  for (const modelName of modelsToTry) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const res = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: buildPrompt(title, content, bullets) }]
+          }],
+          generationConfig: {
+            maxOutputTokens: 600,
+            temperature: 0.2
+          }
+        })
+      }, 25000);
+
+      const rawText = await res.text().catch(() => '');
+      let data = null;
+      try { data = JSON.parse(rawText); } catch {}
+
+      if (!res.ok) {
+        const errMsg = data?.error?.message || rawText || `HTTP ${res.status}`;
+        if (res.status === 404 || /not found|no longer available|is not supported/i.test(errMsg)) {
+          logger.warn(`Gemini model "${modelName}" unavailable — trying next fallback model...`);
+          lastError = new Error(`Gemini model ${modelName} unavailable: ${errMsg}`);
+          continue;
+        }
+        throw new Error(`Gemini API error: HTTP ${res.status} — ${errMsg.slice(0, 200)}`);
+      }
+
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+      if (!raw) throw new Error('Gemini returned empty response');
+      const formatted = formatBullets(raw, bullets);
+      if (!formatted) throw new Error('Formatted summary was empty');
+      return formatted;
+    } catch (err) {
+      if (/404|no longer available|not found|is not supported/i.test(err.message)) {
+        lastError = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError || new Error('All Gemini models failed');
+}
+
+// ── 3. Cerebras Cloud (1,000,000 tokens/day free — 2,000+ tokens/sec) ─────────
+const CEREBRAS_FALLBACK_MODELS = [
+  process.env.CEREBRAS_MODEL,
+  'llama3.3-70b',
+  'llama3.1-8b',
+  'llama-3.3-70b'
+].filter(Boolean);
+
+async function callCerebras(title, content, bullets) {
+  const apiKey = (process.env.CEREBRAS_API_KEY || '').trim();
+  if (!apiKey) throw new Error('CEREBRAS_API_KEY not set');
+
+  await enforceRateLimit('cerebras');
+
+  let lastError = null;
+  const modelsToTry = [...new Set(CEREBRAS_FALLBACK_MODELS)];
+
+  for (const model of modelsToTry) {
+    try {
+      const res = await fetchWithTimeout('https://api.cerebras.ai/v1/chat/completions', {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a direct news summarizer. Output only bullet points starting with "• ". Do NOT output thinking, planning, or role descriptions.' },
+            { role: 'user',   content: buildPrompt(title, content, bullets) }
+          ],
+          max_tokens:  600,
+          temperature: 0.2
+        })
+      }, 20000);
+
+      const rawText = await res.text().catch(() => '');
+      let data = null;
+      try { data = JSON.parse(rawText); } catch {}
+
+      if (!res.ok) {
+        const errMsg = data?.error?.message || rawText || `HTTP ${res.status}`;
+        if (res.status === 404 || res.status === 400 || /model_not_found|does not exist|not supported/i.test(errMsg)) {
+          logger.warn(`Cerebras model "${model}" unavailable (${res.status}) — trying next fallback...`);
+          lastError = new Error(`Cerebras model ${model} unavailable: ${errMsg}`);
+          continue;
+        }
+        throw new Error(`Cerebras API error: HTTP ${res.status} — ${errMsg.slice(0, 200)}`);
+      }
+
+      const raw = data?.choices?.[0]?.message?.content?.trim() || '';
+      if (!raw) throw new Error('Cerebras returned empty response');
+      const formatted = formatBullets(raw, bullets);
+      if (!formatted) throw new Error('Formatted summary was empty');
+      return formatted;
+    } catch (err) {
+      if (/model_not_found|does not exist|404|400/i.test(err.message)) {
+        lastError = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError || new Error('All Cerebras models failed');
+}
+
+// ── 4. Mistral AI (Free Experimentation Tier) ─────────────────────────────────
+const MISTRAL_FALLBACK_MODELS = [
+  process.env.MISTRAL_MODEL,
+  'mistral-small-latest',
+  'open-mistral-nemo',
+  'mistral-medium-latest'
+].filter(Boolean);
+
+async function callMistral(title, content, bullets) {
+  const apiKey = (process.env.MISTRAL_API_KEY || '').trim();
+  if (!apiKey) throw new Error('MISTRAL_API_KEY not set');
+
+  await enforceRateLimit('mistral');
+
+  let lastError = null;
+  const modelsToTry = [...new Set(MISTRAL_FALLBACK_MODELS)];
+
+  for (const model of modelsToTry) {
+    try {
+      const res = await fetchWithTimeout('https://api.mistral.ai/v1/chat/completions', {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a direct news summarizer. Output only bullet points starting with "• ". Do NOT output thinking, planning, or role descriptions.' },
+            { role: 'user',   content: buildPrompt(title, content, bullets) }
+          ],
+          max_tokens:  600,
+          temperature: 0.2
+        })
+      }, 25000);
+
+      const rawText = await res.text().catch(() => '');
+      let data = null;
+      try { data = JSON.parse(rawText); } catch {}
+
+      if (!res.ok) {
+        const errMsg = data?.error?.message || rawText || `HTTP ${res.status}`;
+        if (res.status === 404 || res.status === 400 || /model_not_found|does not exist|not supported/i.test(errMsg)) {
+          logger.warn(`Mistral model "${model}" unavailable (${res.status}) — trying next fallback...`);
+          lastError = new Error(`Mistral model ${model} unavailable: ${errMsg}`);
+          continue;
+        }
+        throw new Error(`Mistral API error: HTTP ${res.status} — ${errMsg.slice(0, 200)}`);
+      }
+
+      const raw = data?.choices?.[0]?.message?.content?.trim() || '';
+      if (!raw) throw new Error('Mistral returned empty response');
+      const formatted = formatBullets(raw, bullets);
+      if (!formatted) throw new Error('Formatted summary was empty');
+      return formatted;
+    } catch (err) {
+      if (/model_not_found|does not exist|404|400/i.test(err.message)) {
+        lastError = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError || new Error('All Mistral models failed');
+}
+
+// ── 5. Cohere (1,000 calls/month free) ─────────────────────────────────────────
+const COHERE_FALLBACK_MODELS = [
+  process.env.COHERE_MODEL,
+  'command-r',
+  'command-r-plus',
+  'command-light',
+  'command'
+].filter(Boolean);
+
+async function callCohere(title, content, bullets) {
+  const apiKey = (process.env.COHERE_API_KEY || '').trim();
+  if (!apiKey) throw new Error('COHERE_API_KEY not set');
+
+  await enforceRateLimit('cohere');
+
+  let lastError = null;
+  const modelsToTry = [...new Set(COHERE_FALLBACK_MODELS)];
+
+  for (const model of modelsToTry) {
+    try {
+      const res = await fetchWithTimeout('https://api.cohere.com/v2/chat', {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a direct news summarizer. Output only bullet points starting with "• ". Do NOT output thinking, planning, or role descriptions.' },
+            { role: 'user',   content: { type: 'text', text: buildPrompt(title, content, bullets) } }
+          ]
+        })
+      }, 25000);
+
+      const rawText = await res.text().catch(() => '');
+      let data = null;
+      try { data = JSON.parse(rawText); } catch {}
+
+      if (!res.ok) {
+        const errMsg = data?.message || rawText || `HTTP ${res.status}`;
+        if (res.status === 404 || res.status === 400 || /model_not_found|does not exist|not supported/i.test(errMsg)) {
+          logger.warn(`Cohere model "${model}" unavailable (${res.status}) — trying next fallback...`);
+          lastError = new Error(`Cohere model ${model} unavailable: ${errMsg}`);
+          continue;
+        }
+        throw new Error(`Cohere API error: HTTP ${res.status} — ${errMsg.slice(0, 200)}`);
+      }
+
+      const raw = data?.message?.content?.[0]?.text?.trim() || '';
+      if (!raw) throw new Error('Cohere returned empty response');
+      const formatted = formatBullets(raw, bullets);
+      if (!formatted) throw new Error('Formatted summary was empty');
+      return formatted;
+    } catch (err) {
+      if (/model_not_found|does not exist|404|400/i.test(err.message)) {
+        lastError = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError || new Error('All Cohere models failed');
+}
+
+// ── 6. Cloudflare Workers AI (10,000 neurons/day free) ────────────────────────
+const CLOUDFLARE_FALLBACK_MODELS = [
+  process.env.CLOUDFLARE_MODEL,
+  '@cf/meta/llama-3.3-70b-instruct',
+  '@cf/meta/llama-3.1-8b-instruct',
+  '@cf/mistral/mistral-7b-instruct-v0.2'
+].filter(Boolean);
+
+async function callCloudflare(title, content, bullets) {
+  const apiToken  = (process.env.CLOUDFLARE_API_TOKEN || '').trim();
+  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || '').trim();
+  if (!apiToken || !accountId) throw new Error('CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID not set');
+
+  await enforceRateLimit('cloudflare');
+
+  let lastError = null;
+  const modelsToTry = [...new Set(CLOUDFLARE_FALLBACK_MODELS)];
+
+  for (const model of modelsToTry) {
+    try {
+      const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
+      const res = await fetchWithTimeout(url, {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: 'You are a direct news summarizer. Output only bullet points starting with "• ". Do NOT output thinking, planning, or role descriptions.' },
+            { role: 'user',   content: buildPrompt(title, content, bullets) }
+          ],
+          max_tokens: 600
+        })
+      }, 25000);
+
+      const rawText = await res.text().catch(() => '');
+      let data = null;
+      try { data = JSON.parse(rawText); } catch {}
+
+      if (!res.ok) {
+        const errMsg = data?.errors?.[0]?.message || rawText || `HTTP ${res.status}`;
+        if (res.status === 404 || /not found|invalid model/i.test(errMsg)) {
+          logger.warn(`Cloudflare model "${model}" unavailable — trying next fallback...`);
+          lastError = new Error(`Cloudflare model ${model} unavailable: ${errMsg}`);
+          continue;
+        }
+        throw new Error(`Cloudflare API error: HTTP ${res.status} — ${errMsg.slice(0, 200)}`);
+      }
+
+      const raw = (data?.result?.response || '').trim();
+      if (!raw) throw new Error('Cloudflare returned empty response');
+      const formatted = formatBullets(raw, bullets);
+      if (!formatted) throw new Error('Formatted summary was empty');
+      return formatted;
+    } catch (err) {
+      if (/not found|404/i.test(err.message)) {
+        lastError = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError || new Error('All Cloudflare models failed');
+}
+
+// ── 7. OpenRouter ─────────────────────────────────────────────────────────────
 const OPENROUTER_FALLBACK_MODELS = [
   process.env.OPENROUTER_MODEL,
   'nvidia/nemotron-3.5-lightning:free',
@@ -290,7 +609,6 @@ async function getAvailableOpenRouterModels(apiKey) {
         .map((m) => m.id)
         .filter((id) => id && id.includes(':free') && !id.includes('whisper') && !id.includes('guard'));
 
-      // Sort by best chat instruction models
       freeModels.sort((a, b) => {
         const score = (id) => {
           const lower = id.toLowerCase();
@@ -348,10 +666,7 @@ async function callOpenRouter(title, content, bullets) {
 
       if (!res.ok) {
         const errMsg = data?.error?.message || rawText || `HTTP ${res.status}`;
-        const isModelError = res.status === 404 || res.status === 400 ||
-          /unavailable for free|not found|no endpoints|decommissioned|not available/i.test(errMsg);
-
-        if (isModelError) {
+        if (res.status === 404 || res.status === 400 || /unavailable for free|not found|no endpoints|decommissioned|not available/i.test(errMsg)) {
           logger.warn(`OpenRouter model "${model}" unavailable (${res.status}) — trying fallback model...`);
           lastError = new Error(`OpenRouter model ${model} unavailable: ${errMsg}`);
           continue;
@@ -363,8 +678,7 @@ async function callOpenRouter(title, content, bullets) {
       if (!raw) throw new Error('OpenRouter returned empty response');
       const formatted = formatBullets(raw, bullets);
       if (!formatted) {
-        logger.warn(`OpenRouter model "${model}" output could not be parsed as clean bullets — trying next model...`);
-        lastError = new Error(`OpenRouter model ${model} output only reasoning metadata`);
+        lastError = new Error(`OpenRouter model ${model} output empty formatted summary`);
         continue;
       }
       return formatted;
@@ -380,75 +694,7 @@ async function callOpenRouter(title, content, bullets) {
   throw lastError || new Error('All OpenRouter free models failed');
 }
 
-// ── Gemini (Native REST API) ──────────────────────────────────────────────────
-const GEMINI_FALLBACK_MODELS = [
-  process.env.GEMINI_MODEL,
-  'gemini-1.5-flash',
-  'gemini-1.5-pro',
-  'gemini-2.0-flash',
-  'gemini-2.5-flash'
-].filter(Boolean);
-
-async function callGemini(title, content, bullets) {
-  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
-  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
-
-  await enforceRateLimit('gemini');
-
-  let lastError = null;
-  const modelsToTry = [...new Set(GEMINI_FALLBACK_MODELS)];
-
-  for (const modelName of modelsToTry) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const res = await fetchWithTimeout(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{ text: buildPrompt(title, content, bullets) }]
-          }],
-          generationConfig: {
-            maxOutputTokens: 600,
-            temperature: 0.2
-          }
-        })
-      }, 25000);
-
-      const rawText = await res.text().catch(() => '');
-      let data = null;
-      try { data = JSON.parse(rawText); } catch {}
-
-      if (!res.ok) {
-        const errMsg = data?.error?.message || rawText || `HTTP ${res.status}`;
-        const isModelError = res.status === 404 || /not found|no longer available|is not supported/i.test(errMsg);
-
-        if (isModelError) {
-          logger.warn(`Gemini model "${modelName}" unavailable — trying next fallback model...`);
-          lastError = new Error(`Gemini model ${modelName} unavailable: ${errMsg}`);
-          continue;
-        }
-        throw new Error(`Gemini API error: HTTP ${res.status} — ${errMsg.slice(0, 200)}`);
-      }
-
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-      if (!raw) throw new Error('Gemini returned empty response');
-      const formatted = formatBullets(raw, bullets);
-      if (!formatted) throw new Error('Formatted summary was empty');
-      return formatted;
-    } catch (err) {
-      if (/404|no longer available|not found|is not supported/i.test(err.message)) {
-        lastError = err;
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  throw lastError || new Error('All Gemini models failed');
-}
-
-// ── Ollama (local) ────────────────────────────────────────────────────────────
+// ── 8. Ollama (local) ─────────────────────────────────────────────────────────
 async function callOllama(title, content, bullets) {
   const baseUrl = (process.env.OLLAMA_URL || 'http://localhost:11434').replace(/\/$/, '');
   const model   = process.env.OLLAMA_MODEL || 'llama3.2';
@@ -476,7 +722,7 @@ async function callOllama(title, content, bullets) {
   return formatBullets(raw, bullets);
 }
 
-// ── Hugging Face Inference API ────────────────────────────────────────────────
+// ── 9. Hugging Face Inference API ─────────────────────────────────────────────
 async function callHuggingFace(content, bullets, retryCount = 0) {
   const apiKey = (process.env.HF_API_KEY || '').trim();
   if (!apiKey) throw new Error('HF_API_KEY not set');
@@ -522,7 +768,7 @@ async function callHuggingFace(content, bullets, retryCount = 0) {
   return sentences.map((s) => `• ${s}`).join('\n');
 }
 
-// ── Extractive (no AI) ────────────────────────────────────────────────────────
+// ── 10. Extractive (Deterministic sentence extraction) ────────────────────────
 function extractive(content, title, bullets) {
   const text = content || title;
   const sentences = text
@@ -541,11 +787,15 @@ function extractive(content, title, bullets) {
 
 function initSummarizer() {
   const providerInfo = {
-    groq:        `Groq Cloud   (prioritizing flagship models) — free 14,400 req/day`,
-    ollama:      `Ollama Local (model: ${process.env.OLLAMA_MODEL || 'llama3.2'})  — unlimited, no API key`,
-    huggingface: `HuggingFace  (model: ${process.env.HF_MODEL || 'facebook/bart-large-cnn'})  — free tier`,
-    openrouter:  `OpenRouter   (prioritizing flagship free models)`,
-    gemini:      `Gemini       (model: ${process.env.GEMINI_MODEL || 'gemini-1.5-flash'})  — free tier`,
+    groq:        `Groq Cloud   (model: ${process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'}) — 14,400 free req/day`,
+    gemini:      `Gemini       (model: ${process.env.GEMINI_MODEL || 'gemini-1.5-flash'}) — 1,500 free req/day`,
+    cerebras:    `Cerebras     (model: ${process.env.CEREBRAS_MODEL || 'llama3.3-70b'}) — 1,000,000 free tokens/day`,
+    mistral:     `Mistral AI   (model: ${process.env.MISTRAL_MODEL || 'mistral-small-latest'}) — free tier`,
+    cohere:      `Cohere       (model: ${process.env.COHERE_MODEL || 'command-r'}) — 1,000 free calls/month`,
+    cloudflare:  `Cloudflare   (model: ${process.env.CLOUDFLARE_MODEL || '@cf/meta/llama-3.3-70b-instruct'}) — 10,000 neurons/day`,
+    openrouter:  `OpenRouter   (model: ${process.env.OPENROUTER_MODEL || 'auto-discovered free models'})`,
+    ollama:      `Ollama Local (model: ${process.env.OLLAMA_MODEL || 'llama3.2'}) — unlimited, no API key`,
+    huggingface: `HuggingFace  (model: ${process.env.HF_MODEL || 'facebook/bart-large-cnn'}) — free tier`,
     extractive:  `Extractive   — no AI, no API key, always works`
   };
 
@@ -567,7 +817,19 @@ async function summarizeArticle(title, content, bullets = 3, url = '') {
     }
   }
 
-  const fallbackOrder = [PROVIDER, 'groq', 'gemini', 'openrouter', 'huggingface', 'ollama'];
+  // Complete resilient multi-provider auto-fallback chain
+  const fallbackOrder = [
+    PROVIDER,
+    'cerebras',
+    'groq',
+    'gemini',
+    'mistral',
+    'cohere',
+    'cloudflare',
+    'openrouter',
+    'huggingface',
+    'ollama'
+  ];
   const tried = new Set();
 
   for (const p of fallbackOrder) {
@@ -593,11 +855,15 @@ async function summarizeArticle(title, content, bullets = 3, url = '') {
 async function tryProvider(provider, title, content, bullets, attempt = 1) {
   try {
     switch (provider) {
+      case 'cerebras':    return await callCerebras(title, content, bullets);
       case 'groq':        return await callGroq(title, content, bullets);
+      case 'gemini':      return await callGemini(title, content, bullets);
+      case 'mistral':     return await callMistral(title, content, bullets);
+      case 'cohere':      return await callCohere(title, content, bullets);
+      case 'cloudflare':  return await callCloudflare(title, content, bullets);
+      case 'openrouter':  return await callOpenRouter(title, content, bullets);
       case 'ollama':      return await callOllama(title, content, bullets);
       case 'huggingface': return await callHuggingFace(content, bullets);
-      case 'openrouter':  return await callOpenRouter(title, content, bullets);
-      case 'gemini':      return await callGemini(title, content, bullets);
       default:
         logger.warn(`Unknown SUMMARIZER_PROVIDER "${provider}" — using extractive`);
         return null;

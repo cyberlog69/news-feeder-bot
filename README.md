@@ -144,9 +144,18 @@ Test all your configured LLM API keys and model availability in real time:
 npm run test-ai
 ```
 
+### 🏆 Top 6 Supported Free AI Providers
+1. 🥇 **Groq Cloud** (`GROQ_API_KEY`) — 14,400 free requests/day (~300ms ultra-fast LPU inference).
+2. 🥈 **Google Gemini** (`GEMINI_API_KEY`) — 1,500 free requests/day (Native REST, zero dependencies).
+3. 🥉 **Cerebras Cloud** (`CEREBRAS_API_KEY`) — 1,000,000 free tokens/day (2,000+ tokens/sec, world's fastest AI chip).
+4. 4️⃣ **Mistral AI** (`MISTRAL_API_KEY`) — Free experimentation tier (Premier European models).
+5. 5️⃣ **Cohere** (`COHERE_API_KEY`) — 1,000 free calls/month (Purpose-built text summarization).
+6. 6️⃣ **Cloudflare Workers AI** (`CLOUDFLARE_API_TOKEN`) — 10,000 free neurons/day on global edge network.
+* Plus: **OpenRouter**, **Ollama** (100% offline & unlimited), and **Extractive** (zero-API fallback).
+
 ### What It Tests:
-- 🔑 **API Key Validation**: Verifies detected keys for **Groq**, **Google Gemini**, **OpenRouter**, and **HuggingFace**.
-- 🤖 **Dynamic Model Discovery**: Queries live `/models` endpoints in real time to discover currently active production models.
+- 🔑 **API Key Validation**: Verifies detected keys across all configured providers.
+- 🤖 **Dynamic Model Discovery**: Queries live `/models` endpoints in real time to discover active production models.
 - ⚡ **Latency Benchmark**: Measures live LLM inference execution time in milliseconds.
 - 📝 **Natural Executive Summary**: Validates clean, human-readable 3-bullet output with chain-of-thought `<think>` tags and planning artifacts automatically stripped.
 

@@ -1,5 +1,5 @@
 // scripts/test-ai.js
-// Zero-dependency diagnostic utility to test all configured AI summarizer providers.
+// Zero-dependency diagnostic utility to test all 6 free AI summarizer providers.
 // Run with: npm run test-ai
 
 const fs = require('fs');
@@ -52,7 +52,7 @@ async function testGroqModelsEndpoint(apiKey) {
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       const chatModels = (data.data || []).map(m => m.id).filter(id => !id.includes('whisper') && !id.includes('guard'));
-      console.log(`🤖 Groq Live Models Available (${chatModels.length}): ${chatModels.slice(0, 5).join(', ')}…`);
+      console.log(`🤖 Groq Live Models Available (${chatModels.length}): ${chatModels.slice(0, 4).join(', ')}…`);
     } else {
       console.log(`⚠️ Groq Key Validation: HTTP ${res.status} — ${data?.error?.message || 'Invalid key'}`);
     }
@@ -61,57 +61,76 @@ async function testGroqModelsEndpoint(apiKey) {
   }
 }
 
-async function testOpenRouterModelsEndpoint(apiKey) {
+async function testCerebrasModelsEndpoint(apiKey) {
   if (!apiKey) return;
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/models', {
+    const res = await fetch('https://api.cerebras.ai/v1/models', {
       headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
-      const freeModels = (data.data || []).map(m => m.id).filter(id => id.includes(':free'));
-      console.log(`🌐 OpenRouter Live Free Models (${freeModels.length}): ${freeModels.slice(0, 4).join(', ')}…`);
+      const chatModels = (data.data || []).map(m => m.id);
+      console.log(`⚡ Cerebras Live Models Available (${chatModels.length}): ${chatModels.slice(0, 3).join(', ')}…`);
     } else {
-      console.log(`⚠️ OpenRouter Key Validation: HTTP ${res.status} — ${data?.error?.message || 'Invalid key'}`);
+      console.log(`⚠️ Cerebras Key Validation: HTTP ${res.status} — ${data?.error?.message || 'Invalid key'}`);
     }
   } catch (err) {
-    console.log(`⚠️ OpenRouter Connection: ${err.message}`);
+    console.log(`⚠️ Cerebras Connection: ${err.message}`);
+  }
+}
+
+async function testMistralModelsEndpoint(apiKey) {
+  if (!apiKey) return;
+  try {
+    const res = await fetch('https://api.mistral.ai/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey.trim()}` }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const chatModels = (data.data || []).map(m => m.id);
+      console.log(`🇫🇷 Mistral Live Models Available (${chatModels.length}): ${chatModels.slice(0, 3).join(', ')}…`);
+    } else {
+      console.log(`⚠️ Mistral Key Validation: HTTP ${res.status} — ${data?.error?.message || 'Invalid key'}`);
+    }
+  } catch (err) {
+    console.log(`⚠️ Mistral Connection: ${err.message}`);
   }
 }
 
 async function runDiagnostic() {
   console.log('\n═══════════════════════════════════════════════════════════');
-  console.log('       🔍  NEWS FEEDER BOT — AI SUMMARIZER DIAGNOSTIC      ');
+  console.log('    🔍  NEWS FEEDER BOT — TOP 6 FREE AI DIAGNOSTICS        ');
   console.log('═══════════════════════════════════════════════════════════\n');
 
   const provider = (process.env.SUMMARIZER_PROVIDER || 'groq').toLowerCase().trim();
   const groqKey = (process.env.GROQ_API_KEY || '').trim();
   const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
+  const cerebrasKey = (process.env.CEREBRAS_API_KEY || '').trim();
+  const mistralKey = (process.env.MISTRAL_API_KEY || '').trim();
+  const cohereKey = (process.env.COHERE_API_KEY || '').trim();
+  const cloudflareToken = (process.env.CLOUDFLARE_API_TOKEN || '').trim();
   const openrouterKey = (process.env.OPENROUTER_API_KEY || '').trim();
-  const hfKey = (process.env.HF_API_KEY || '').trim();
 
-  console.log(`📌 Configured Provider:  ${provider.toUpperCase()}`);
-  console.log(`🔑 GROQ_API_KEY:         ${groqKey ? '✔ Configured (' + groqKey.slice(0, 8) + '…)' : '❌ Not set'}`);
-  
-  if (geminiKey) {
-    const isStandardGemini = geminiKey.startsWith('AIzaSy');
-    console.log(`🔑 GEMINI_API_KEY:       ✔ Configured (${geminiKey.slice(0, 8)}…) ${isStandardGemini ? '' : '⚠️ (Gemini keys start with AIzaSy... from aistudio.google.com)'}`);
-  } else {
-    console.log(`🔑 GEMINI_API_KEY:       ❌ Not set`);
-  }
-
-  console.log(`🔑 OPENROUTER_API_KEY:   ${openrouterKey ? '✔ Configured (' + openrouterKey.slice(0, 8) + '…)' : '❌ Not set'}`);
-  console.log(`🔑 HF_API_KEY:           ${hfKey ? '✔ Configured (' + hfKey.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log(`📌 Primary Configured Provider: ${provider.toUpperCase()}`);
+  console.log('───────────────────────────────────────────────────────────');
+  console.log(`🥇 GROQ_API_KEY:         ${groqKey ? '✔ Configured (' + groqKey.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log(`🥈 GEMINI_API_KEY:       ${geminiKey ? '✔ Configured (' + geminiKey.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log(`🥉 CEREBRAS_API_KEY:     ${cerebrasKey ? '✔ Configured (' + cerebrasKey.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log(`4️⃣ MISTRAL_API_KEY:      ${mistralKey ? '✔ Configured (' + mistralKey.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log(`5️⃣ COHERE_API_KEY:       ${cohereKey ? '✔ Configured (' + cohereKey.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log(`6️⃣ CLOUDFLARE_API_TOKEN: ${cloudflareToken ? '✔ Configured (' + cloudflareToken.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log(`🌐 OPENROUTER_API_KEY:   ${openrouterKey ? '✔ Configured (' + openrouterKey.slice(0, 8) + '…)' : '❌ Not set'}`);
   console.log('───────────────────────────────────────────────────────────');
 
   if (groqKey) await testGroqModelsEndpoint(groqKey);
-  if (openrouterKey) await testOpenRouterModelsEndpoint(openrouterKey);
+  if (cerebrasKey) await testCerebrasModelsEndpoint(cerebrasKey);
+  if (mistralKey) await testMistralModelsEndpoint(mistralKey);
 
   console.log('───────────────────────────────────────────────────────────\n');
 
   initSummarizer();
 
-  console.log('\n🚀 Testing live article summarization…\n');
+  console.log('\n🚀 Testing live article summarization & multi-provider cascade…\n');
   const startTime = Date.now();
 
   try {
@@ -138,7 +157,7 @@ async function runDiagnostic() {
     if (result.aiUsed) {
       console.log('🎉 SUCCESS: AI Summarization is 100% operational and healthy!\n');
     } else {
-      console.log('⚠️ NOTE: Summarization fell back to extractive. Review the diagnostics above.\n');
+      console.log('⚠️ NOTE: Summarization fell back to extractive. Check key validity above.\n');
     }
   } catch (err) {
     console.error('\n❌ DIAGNOSTIC FAILED:', err.message);
