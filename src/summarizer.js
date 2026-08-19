@@ -80,6 +80,20 @@ async function enforceRateLimit(providerName) {
   lastCallAt = Date.now();
 }
 
+// ── Sanitize model names (fixes duplicate strings / typos from .env) ───────────
+function sanitizeModelName(modelName, defaultModel = '') {
+  if (!modelName || typeof modelName !== 'string') return defaultModel;
+  let name = modelName.trim().replace(/^['"]|['"]$/g, '');
+
+  // Detect and fix accidental duplicate concatenation (e.g. "llama-3.3-70b-versatilellama-3.3-70b-versatile")
+  const halfLen = Math.floor(name.length / 2);
+  if (halfLen >= 4 && name.slice(0, halfLen) === name.slice(halfLen)) {
+    name = name.slice(0, halfLen);
+  }
+
+  return name || defaultModel;
+}
+
 // ── Prompt builder ────────────────────────────────────────────────────────────
 function buildPrompt(title, content, bullets) {
   return (
@@ -157,7 +171,7 @@ function formatBullets(rawText, bullets) {
 
 // ── 1. Groq Cloud (14,400 req/day free) ────────────────────────────────────────
 const GROQ_FALLBACK_MODELS = [
-  process.env.GROQ_MODEL,
+  sanitizeModelName(process.env.GROQ_MODEL),
   'llama-3.3-70b-versatile',
   'openai/gpt-oss-120b',
   'mixtral-8x7b-32768',
@@ -211,8 +225,10 @@ async function callGroq(title, content, bullets) {
 
   await enforceRateLimit('groq');
 
+  const configured = sanitizeModelName(process.env.GROQ_MODEL);
   const discovered = await getAvailableGroqModels(apiKey);
-  const modelsToTry = [...new Set([...(process.env.GROQ_MODEL ? [process.env.GROQ_MODEL] : []), ...discovered, ...GROQ_FALLBACK_MODELS])];
+  const rawList = [...(configured ? [configured] : []), ...discovered, ...GROQ_FALLBACK_MODELS];
+  const modelsToTry = [...new Set(rawList.map((m) => sanitizeModelName(m)).filter(Boolean))];
 
   let lastError = null;
 
