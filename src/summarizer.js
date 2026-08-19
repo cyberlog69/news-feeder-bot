@@ -171,14 +171,14 @@ function formatBullets(rawText, bullets) {
 
 // ── 1. Groq Cloud (14,400 req/day free) ────────────────────────────────────────
 const GROQ_FALLBACK_MODELS = [
-  sanitizeModelName(process.env.GROQ_MODEL),
-  'llama-3.3-70b-versatile',
   'openai/gpt-oss-120b',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'openai/gpt-oss-20b',
   'mixtral-8x7b-32768',
   'gemma2-9b-it',
-  'openai/gpt-oss-20b',
   'qwen/qwen3.6-27b'
-].filter(Boolean);
+];
 
 async function getAvailableGroqModels(apiKey) {
   try {
@@ -201,10 +201,11 @@ async function getAvailableGroqModels(apiKey) {
       filtered.sort((a, b) => {
         const score = (id) => {
           const lower = id.toLowerCase();
+          if (lower.includes('gpt-oss-120b')) return 110;
           if (lower.includes('llama-3.3-70b')) return 100;
-          if (lower.includes('gpt-oss-120b')) return 90;
-          if (lower.includes('llama-3.1-70b')) return 80;
-          if (lower.includes('llama-3.1-8b')) return 70;
+          if (lower.includes('llama-3.1-70b')) return 90;
+          if (lower.includes('llama-3.1-8b')) return 80;
+          if (lower.includes('gpt-oss-20b')) return 70;
           if (lower.includes('mixtral')) return 60;
           if (lower.includes('gemma2')) return 50;
           if (lower.includes('qwen3.6')) return 40;
@@ -227,8 +228,19 @@ async function callGroq(title, content, bullets) {
 
   const configured = sanitizeModelName(process.env.GROQ_MODEL);
   const discovered = await getAvailableGroqModels(apiKey);
-  const rawList = [...(configured ? [configured] : []), ...discovered, ...GROQ_FALLBACK_MODELS];
-  const modelsToTry = [...new Set(rawList.map((m) => sanitizeModelName(m)).filter(Boolean))];
+
+  let modelsToTry;
+  if (discovered.length > 0) {
+    if (configured && discovered.includes(configured)) {
+      modelsToTry = [configured, ...discovered.filter((m) => m !== configured)];
+    } else {
+      modelsToTry = [...discovered, ...(configured ? [configured] : []), ...GROQ_FALLBACK_MODELS];
+    }
+  } else {
+    modelsToTry = [...(configured ? [configured] : []), ...GROQ_FALLBACK_MODELS];
+  }
+
+  modelsToTry = [...new Set(modelsToTry.map((m) => sanitizeModelName(m)).filter(Boolean))];
 
   let lastError = null;
 
@@ -650,8 +662,21 @@ async function callOpenRouter(title, content, bullets) {
 
   await enforceRateLimit('openrouter');
 
+  const configured = sanitizeModelName(process.env.OPENROUTER_MODEL);
   const discovered = await getAvailableOpenRouterModels(apiKey);
-  const modelsToTry = [...new Set([...(process.env.OPENROUTER_MODEL ? [process.env.OPENROUTER_MODEL] : []), ...discovered, ...OPENROUTER_FALLBACK_MODELS])];
+
+  let modelsToTry;
+  if (discovered.length > 0) {
+    if (configured && discovered.includes(configured)) {
+      modelsToTry = [configured, ...discovered.filter((m) => m !== configured)];
+    } else {
+      modelsToTry = [...discovered, ...(configured ? [configured] : []), ...OPENROUTER_FALLBACK_MODELS];
+    }
+  } else {
+    modelsToTry = [...(configured ? [configured] : []), ...OPENROUTER_FALLBACK_MODELS];
+  }
+
+  modelsToTry = [...new Set(modelsToTry.map((m) => sanitizeModelName(m)).filter(Boolean))];
 
   let lastError = null;
 
