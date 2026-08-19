@@ -1,8 +1,26 @@
 // src/push-sender.js
 // Mobile Push Notification Sender (Pushover & Ntfy.sh)
-// Zero external dependencies — uses native fetch with UTF-8 JSON payloads.
+// Zero external dependencies — uses native fetch with UTF-8 plain-text payloads.
 
 const logger = require('./logger');
+
+/**
+ * Sanitize strings for HTTP headers to prevent ByteString/Latin1 encoding errors
+ * @param {string} str
+ * @param {number} maxLen
+ * @returns {string}
+ */
+function sanitizeHeader(str, maxLen = 120) {
+  if (!str) return '';
+  return String(str)
+    .replace(/[\u2018\u2019]/g, "'")    // smart single quotes
+    .replace(/[\u201C\u201D]/g, '"')    // smart double quotes
+    .replace(/[\u2013\u2014]/g, '-')    // en/em dashes
+    .replace(/[\u2026]/g, '...')        // ellipsis
+    .replace(/[^\x20-\x7E]/g, '')       // strip any remaining non-ASCII header bytes
+    .trim()
+    .slice(0, maxLen);
+}
 
 class PushSender {
   /**
@@ -44,25 +62,25 @@ class PushSender {
    * @param {boolean} [isCritical=false]
    */
   async sendPush(title, summary, url = '#', isCritical = false) {
-    const cleanText = String(summary || '').replace(/<[^>]{0,500}>/g, '').slice(0, 1000);
+    const cleanText = String(summary || '').replace(/<[^>]{0,500}>/g, '').slice(0, 2000);
     const cleanTitle = String(title || 'News Alert').slice(0, 200);
 
     if (this.provider === 'ntfy' && this.topicUrl) {
-      // Ntfy.sh JSON API: Prevents ByteString header conversion errors on Unicode/curly quotes (8217)
-      const payload = {
-        title: cleanTitle,
-        message: cleanText,
-        priority: isCritical ? 4 : 3,
-        tags: isCritical ? ['warning', 'rotating_light'] : ['newspaper'],
-        click: url
+      // Ntfy.sh REST API with clean plain-text body and sanitized ASCII headers
+      const safeTitle = sanitizeHeader(cleanTitle, 120);
+      const headers = {
+        'Priority': isCritical ? '4' : '3',
+        'Tags':     isCritical ? 'warning,rotating_light' : 'newspaper',
+        'Click':    url || '#'
       };
+      if (safeTitle) {
+        headers['Title'] = safeTitle;
+      }
 
       const res = await fetchWithTimeout(this.topicUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
+        headers,
+        body: cleanText
       }, 8000);
 
       if (!res.ok) {
