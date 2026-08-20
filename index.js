@@ -28,6 +28,7 @@ const {
 } = require('./src/formatter');
 const { startDashboard } = require('./src/web-dashboard');
 const { validateEnv }    = require('./src/env-validator');
+const { syncThreatData, runRansomwareTracking } = require('./src/threat-ops');
 const logger             = require('./src/logger');
 
 const BOT_START_TIME = Date.now();
@@ -268,6 +269,51 @@ async function main() {
       }
     });
     logger.info(`Daily health check scheduled at ${healthHour}:00`);
+  }
+
+  // ── Database maintenance cron (daily): backup + optimize + prune ─────────
+  const maintenanceHour = parseInt(config.settings?.maintenanceHour, 10);
+  if (!isNaN(maintenanceHour) && maintenanceHour >= 0 && maintenanceHour <= 23) {
+    const { createDatabaseBackup, optimizeDatabase, pruneOldRecords, cleanupGeneratedMedia } = require('./src/db-maintenance');
+    cron.schedule(`0 ${maintenanceHour} * * *`, async () => {
+      logger.info('Running daily database maintenance...');
+      pruneOldRecords(config.settings?.backupRetentionDays || 90);
+      cleanupGeneratedMedia(30);
+      const backupPath = createDatabaseBackup();
+      const optimized = optimizeDatabase();
+      logger.info(`Maintenance complete — backup: ${backupPath || 'none'}, optimization: ${JSON.stringify(optimized)}`);
+    });
+    logger.info(`Daily database maintenance scheduled at ${maintenanceHour}:00`);
+  }
+
+  // ── Threat Ops: CISA KEV sync + ransomware tracker (daily) ────────────────
+  const threatOpsHour = parseInt(config.settings?.threatOpsHour, 10);
+  const threatOpsEnabled = config.settings?.enableThreatOps !== false;
+  if (threatOpsEnabled) {
+    // Startup sync (fire-and-forget — never blocks boot)
+    syncThreatData(false).catch((err) =>
+      logger.warn(`Threat data startup sync failed: ${err.message.split('\n')[0]}`)
+    );
+
+    // First ransomware sweep shortly after boot (gives senders time to init)
+    setTimeout(async () => {
+      await runRansomwareTracking(senders).catch((err) =>
+        logger.warn(`Startup ransomware sweep failed: ${err.message.split('\n')[0]}`)
+      );
+    }, 90 * 1000);
+
+    if (!isNaN(threatOpsHour) && threatOpsHour >= 0 && threatOpsHour <= 23) {
+      cron.schedule(`0 ${threatOpsHour} * * *`, async () => {
+        logger.info('Running daily threat operations (KEV + ransomware)...');
+        await syncThreatData(false).catch((err) =>
+          logger.warn(`Threat data sync failed: ${err.message.split('\n')[0]}`)
+        );
+        await runRansomwareTracking(senders).catch((err) =>
+          logger.warn(`Ransomware tracking failed: ${err.message.split('\n')[0]}`)
+        );
+      });
+      logger.info(`Daily threat ops scheduled at ${threatOpsHour}:00`);
+    }
   }
 }
 

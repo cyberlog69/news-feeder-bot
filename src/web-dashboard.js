@@ -23,6 +23,51 @@ const IS_PROD   = process.env.NODE_ENV === 'production';
 
 // ── Auth token for /trigger (optional — open if not set) ─────────────────────
 const DASHBOARD_TOKEN = (process.env.DASHBOARD_TOKEN || '').trim();
+// In production, administrative endpoints ALWAYS require a token — even if
+// DASHBOARD_TOKEN was not configured. Prevents silent open admin access.
+const AUTH_REQUIRED = Boolean(DASHBOARD_TOKEN) || IS_PROD;
+
+const { timingSafeEqual, validateToken } = require('./security-guard');
+const { recordAuditEvent } = require('./audit-logger');
+
+/** Validate an admin/analyst/auditor token from the request, audited on failure. */
+function isTokenValid(req, requiredRole = 'analyst') {
+  const authHeader = req.headers['authorization'] || '';
+  const provided   = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const valid      = validateToken(provided, requiredRole);
+  if (!valid) {
+    recordAuthFailure(req.url, provided, req.socket?.remoteAddress || '127.0.0.1');
+  }
+  return valid;
+}
+
+/** Emit a SIEM audit event for a failed authentication attempt. */
+function recordAuthFailure(endpoint, providedToken, clientIp) {
+  try {
+    recordAuditEvent({
+      type: 'AUTH_FAILURE',
+      name: 'Unauthorized API access attempt',
+      severity: 'high',
+      actor: 'unknown',
+      details: `Endpoint=${endpoint} IP=${clientIp} TokenProvided=${providedToken ? 'yes' : 'no'}`,
+      ip: clientIp
+    });
+  } catch {
+    // audit logging must never break the request path
+  }
+}
+
+/** Atomically persist config.json; returns false on failure (e.g. read-only volume). */
+function writeConfigFile(configPath, config) {
+  try {
+    const tmp = `${configPath}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2), 'utf-8');
+    fs.renameSync(tmp, configPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function getLatestLog(lines = 100) {
   try {
@@ -111,6 +156,12 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
     #triggerStatus.err{background:#450a0a;color:var(--red);border:1px solid var(--red)}
     #triggerStatus.running{background:#1e1b4b;color:var(--accent);border:1px solid var(--accent)}
     .refresh-note{text-align:center;color:var(--muted);font-size:12px;padding:16px}
+    .search-input{padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;min-width:280px}
+    .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+    .bar-label{min-width:120px;font-size:12px;color:var(--muted);text-align:right}
+    .bar-track{flex:1;background:var(--border);border-radius:4px;height:16px;overflow:hidden}
+    .bar-fill{height:100%;background:var(--accent);border-radius:4px}
+    .bar-count{min-width:36px;font-size:12px;color:var(--text);font-weight:600}
   </style>
 </head>
 <body>
@@ -168,9 +219,95 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
     <div class="log-box">${logHtml || '<div class="log-info">No logs yet today</div>'}</div>
   </section>
 
+  <section>
+    <h2>📚 Article Archive &amp; Search</h2>
+    <div class="toolbar" style="padding:0 0 12px">
+      <input id="searchQ" class="search-input" placeholder="Search title or source… (Enter to search)" onkeydown="if(event.key==='Enter')searchArticles()">
+      <button class="btn" onclick="searchArticles()">🔎 Search</button>
+      <button class="btn" onclick="loadArchive()">🗂 Latest</button>
+    </div>
+    <div id="archiveBox"><div class="log-info">Loading archive…</div></div>
+  </section>
+
+  <section>
+    <h2>📈 Trend Analytics — Articles per day (last 14 days)</h2>
+    <div id="trendByDay" style="margin-bottom:20px"><div class="log-info">Loading…</div></div>
+    <h2>📊 Top Sources (last 14 days)</h2>
+    <div id="trendBySource"><div class="log-info">Loading…</div></div>
+  </section>
+
   <p class="refresh-note">Page auto-refreshes every 30s · <a href="/" style="color:var(--blue)">Refresh now</a></p>
 
   <script>
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function renderArticleTable(articles, emptyMsg) {
+      if (!articles || articles.length === 0) return '<div class="log-info">' + emptyMsg + '</div>';
+      return '<table><thead><tr><th>Time</th><th>Title</th><th>Source</th></tr></thead><tbody>' +
+        articles.map(function(a) {
+          const t = a.sentAt ? new Date(a.sentAt).toLocaleString('en-IN') : '—';
+          const title = a.url ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(a.title || a.url) + '</a>' : esc(a.title || '');
+          return '<tr><td style="white-space:nowrap">' + t + '</td><td>' + title + '</td><td>' + esc(a.source || '—') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+    }
+
+    async function loadArchive() {
+      try {
+        const res = await fetch('/api/articles/archive?limit=50');
+        const data = await res.json();
+        document.getElementById('archiveBox').innerHTML = renderArticleTable(data.articles, 'No articles in archive yet');
+      } catch (e) {
+        document.getElementById('archiveBox').innerHTML = '<div class="log-error">Archive load failed: ' + esc(e.message) + '</div>';
+      }
+    }
+
+    async function searchArticles() {
+      const q = document.getElementById('searchQ').value.trim();
+      if (!q) return;
+      const box = document.getElementById('archiveBox');
+      box.innerHTML = '<div class="log-info">Searching…</div>';
+      try {
+        const res = await fetch('/api/articles/search?q=' + encodeURIComponent(q) + '&limit=50');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        box.innerHTML = '<div class="log-info" style="margin-bottom:8px">' + data.total + ' match(es) for "' + esc(q) + '"</div>' +
+          renderArticleTable(data.articles, 'No matches found');
+      } catch (e) {
+        box.innerHTML = '<div class="log-error">Search failed: ' + esc(e.message) + '</div>';
+      }
+    }
+
+    async function loadTrends() {
+      try {
+        const res = await fetch('/api/trends?days=14');
+        const data = await res.json();
+
+        const maxDay = Math.max.apply(null, data.byDay.map(function(d){return d.count;}).concat([1]));
+        document.getElementById('trendByDay').innerHTML = data.byDay.map(function(d) {
+          const pct = Math.round((d.count / maxDay) * 100);
+          return '<div class="bar-row"><div class="bar-label">' + d.date + '</div>' +
+            '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+            '<div class="bar-count">' + d.count + '</div></div>';
+        }).join('') || '<div class="log-info">No data</div>';
+
+        const maxSrc = Math.max.apply(null, data.bySource.map(function(s){return s.count;}).concat([1]));
+        document.getElementById('trendBySource').innerHTML = data.bySource.length
+          ? data.bySource.map(function(s) {
+              const pct = Math.round((s.count / maxSrc) * 100);
+              return '<div class="bar-row"><div class="bar-label">' + esc(s.source || 'unknown') + '</div>' +
+                '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:var(--green)"></div></div>' +
+                '<div class="bar-count">' + s.count + '</div></div>';
+            }).join('')
+          : '<div class="log-info">No data</div>';
+      } catch (e) {
+        document.getElementById('trendByDay').innerHTML = '<div class="log-error">Trends failed to load</div>';
+      }
+    }
+
+    loadArchive();
+    loadTrends();
+
     async function triggerRun() {
       const btn    = document.getElementById('runNowBtn');
       const status = document.getElementById('triggerStatus');
@@ -243,6 +380,7 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
 
   const server = http.createServer(async (req, res) => {
     const url = req.url.split('?')[0];
+    const query = Object.fromEntries(new URL(req.url, 'http://localhost').searchParams);
     const clientIp = req.socket.remoteAddress || '127.0.0.1';
 
     // ── Rate Limiting Check ──────────────────────────────────────────────
@@ -331,11 +469,12 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
 
     // ── Server-Sent Events (/events) for live log streaming ─────────────
     if (url === '/events') {
-      // Security: require token auth on /events if DASHBOARD_TOKEN is set
-      if (DASHBOARD_TOKEN) {
+      // Security: require token auth on /events (always in production) — timing-safe + audited
+      if (AUTH_REQUIRED) {
         const authHeader = req.headers['authorization'] || '';
         const provided   = authHeader.replace(/^Bearer\s+/i, '').trim();
-        if (provided !== DASHBOARD_TOKEN) {
+        if (!timingSafeEqual(provided, DASHBOARD_TOKEN)) {
+          recordAuthFailure('events', provided, clientIp);
           res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
           res.end(JSON.stringify({ error: 'Unauthorized' }));
           return;
@@ -375,13 +514,52 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       return;
     }
 
+    // ── /api/articles/archive — paginated article archive (History tab) ──
+    if (url === '/api/articles/archive') {
+      const { getArticleArchive } = require('./db');
+      const limit = Math.min(Math.max(parseInt(query.limit, 10) || 50, 1), 200);
+      const offset = Math.max(parseInt(query.offset, 10) || 0, 0);
+      const articles = getArticleArchive(limit, offset);
+      res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+      res.end(JSON.stringify({ count: articles.length, offset, articles }));
+      return;
+    }
+
+    // ── /api/articles/search?q=... — archive keyword search ──────────────
+    if (url === '/api/articles/search') {
+      const { searchArticleArchive } = require('./db');
+      const q = String(query.q || '').trim();
+      if (!q) {
+        res.writeHead(400, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: 'Missing required query parameter: q' }));
+        return;
+      }
+      const limit = Math.min(Math.max(parseInt(query.limit, 10) || 20, 1), 100);
+      const offset = Math.max(parseInt(query.offset, 10) || 0, 0);
+      const { results, total } = searchArticleArchive(q, limit, offset);
+      res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+      res.end(JSON.stringify({ query: q, total, offset, count: results.length, articles: results }));
+      return;
+    }
+
+    // ── /api/trends?days=14 — article trend analytics (Analytics tab) ────
+    if (url === '/api/trends') {
+      const { getArticleTrends } = require('./db');
+      const days = Math.min(Math.max(parseInt(query.days, 10) || 14, 1), 90);
+      const trends = getArticleTrends(days);
+      res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+      res.end(JSON.stringify(trends));
+      return;
+    }
+
     // ── POST /trigger — manually run the pipeline ─────────────────────────
     if (url === '/trigger' && req.method === 'POST') {
-      // Auth check (only if DASHBOARD_TOKEN is configured)
-      if (DASHBOARD_TOKEN) {
+      // Auth check (always required in production) — timing-safe + audited
+      if (AUTH_REQUIRED) {
         const authHeader = req.headers['authorization'] || '';
         const provided   = authHeader.replace(/^Bearer\s+/i, '').trim();
-        if (provided !== DASHBOARD_TOKEN) {
+        if (!timingSafeEqual(provided, DASHBOARD_TOKEN)) {
+          recordAuthFailure('trigger', provided, clientIp);
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unauthorized — invalid or missing token' }));
           return;
@@ -445,6 +623,49 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       return;
     }
 
+    // ── Force CISA KEV / threat data sync (admin) ──────────────────────
+    if (url === '/api/threat-intel/sync' && req.method === 'POST') {
+      if (!isTokenValid(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: 'Unauthorized: Admin token required' }));
+        return;
+      }
+
+      try {
+        const { syncThreatData } = require('./threat-ops');
+        await syncThreatData(true);
+        const { initDb } = require('./db');
+        const db = initDb();
+        const kevCount = db.prepare('SELECT count(*) as count FROM cisa_kev_cache').get().count;
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ success: true, cisaKevTracked: kevCount }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    // ── Run ransomware victim sweep immediately (admin) ────────────────
+    if (url === '/api/threat-intel/ransomware' && req.method === 'POST') {
+      if (!isTokenValid(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: 'Unauthorized: Admin token required' }));
+        return;
+      }
+
+      try {
+        const { runRansomwareTracking } = require('./threat-ops');
+        const alerted = await runRansomwareTracking([]);
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ success: true, alerted }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
     // ── Topic Subscriptions API ────────────────────────────────────────
     if (url === '/api/subscriptions') {
       try {
@@ -468,7 +689,7 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
         const mem = process.memoryUsage();
         const channels = {
           whatsapp: Boolean(process.env.WHATSAPP_ENABLED !== 'false'),
-          telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+          telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_TARGET),
           discord: Boolean(process.env.DISCORD_WEBHOOK_URL),
           googleChat: Boolean(process.env.GOOGLE_CHAT_WEBHOOK_URL),
           slack: Boolean(process.env.SLACK_WEBHOOK_URL),
@@ -574,15 +795,19 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
         return;
       }
 
-      const { createDatabaseBackup, optimizeDatabase } = require('./db-maintenance');
+      const { createDatabaseBackup, optimizeDatabase, pruneOldRecords, cleanupGeneratedMedia } = require('./db-maintenance');
       const backupPath = createDatabaseBackup();
       const optimized = optimizeDatabase();
+      const pruned = pruneOldRecords(90);
+      const cleanedMedia = cleanupGeneratedMedia(30);
 
       res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
       res.end(JSON.stringify({
         success: Boolean(backupPath),
         backupPath,
-        optimized
+        optimized,
+        prunedRecords: pruned,
+        cleanedMediaFiles: cleanedMedia
       }));
       return;
     }
@@ -627,8 +852,21 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
           }
 
           target.enabled = Boolean(enabled);
-          fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+          if (!writeConfigFile(configPath, config)) {
+            res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+            res.end(JSON.stringify({ error: 'Failed to write config.json — check filesystem permissions (read-only volume?).' }));
+            return;
+          }
           if (pipeline.config) pipeline.config.sources = config.sources;
+
+          recordAuditEvent({
+            type: 'SOURCE_MANAGEMENT',
+            name: 'News source toggled',
+            severity: 'medium',
+            actor: 'dashboard',
+            details: `Source=${name} Enabled=${Boolean(enabled)}`,
+            ip: clientIp
+          });
 
           res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
           res.end(JSON.stringify({ message: `Source "${name}" updated`, enabled: target.enabled }));
@@ -671,8 +909,21 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
             enabled: true
           });
 
-          fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+          if (!writeConfigFile(configPath, config)) {
+            res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+            res.end(JSON.stringify({ error: 'Failed to write config.json — check filesystem permissions (read-only volume?).' }));
+            return;
+          }
           if (pipeline.config) pipeline.config.sources = config.sources;
+
+          recordAuditEvent({
+            type: 'SOURCE_MANAGEMENT',
+            name: 'News source added',
+            severity: 'medium',
+            actor: 'dashboard',
+            details: `Source=${name.trim()} RSS=${rss.trim()}`,
+            ip: clientIp
+          });
 
           res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
           res.end(JSON.stringify({ message: `Source "${name}" added successfully` }));
@@ -701,8 +952,21 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
           const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 
           config.sources = (config.sources || []).filter((s) => s.name !== name);
-          fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+          if (!writeConfigFile(configPath, config)) {
+            res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+            res.end(JSON.stringify({ error: 'Failed to write config.json — check filesystem permissions (read-only volume?).' }));
+            return;
+          }
           if (pipeline.config) pipeline.config.sources = config.sources;
+
+          recordAuditEvent({
+            type: 'SOURCE_MANAGEMENT',
+            name: 'News source deleted',
+            severity: 'medium',
+            actor: 'dashboard',
+            details: `Source=${name}`,
+            ip: clientIp
+          });
 
           res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
           res.end(JSON.stringify({ message: `Source "${name}" deleted` }));

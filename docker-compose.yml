@@ -39,8 +39,8 @@ services:
       - whatsapp_cache:/app/.wwebjs_cache
       # Article history, summary cache, and log files
       - bot_data:/app/data
-      # config.json — mount from host so you can edit without rebuild
-      - ./config.json:/app/config.json:ro
+      # config.json — mounted writable so the dashboard can toggle/add/delete sources at runtime
+      - ./config.json:/app/config.json
 
     # Security: limit attack surface
     security_opt:

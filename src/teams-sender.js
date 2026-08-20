@@ -4,6 +4,8 @@
 
 const logger = require('./logger');
 
+const MAX_RETRIES = 3;
+
 class TeamsSender {
   /**
    * @param {string} webhookUrl - MS Teams Webhook URL
@@ -17,8 +19,58 @@ class TeamsSender {
 
   async initialize() {
     logger.info('Initializing Microsoft Teams webhook...');
-    if (!this.webhookUrl) throw new Error('TEAMS_WEBHOOK_URL not set');
+    if (!this.webhookUrl || !this.webhookUrl.startsWith('https://')) {
+      throw new Error('TEAMS_WEBHOOK_URL must be a valid https URL.');
+    }
     logger.success('Microsoft Teams webhook initialized');
+  }
+
+  async _post(payload, timeoutMs = 15000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(this.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        const err = new Error(`Teams webhook error: HTTP ${res.status} — ${errText.slice(0, 200)}`);
+        err.status = res.status;
+        throw err;
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error(`Teams webhook timeout after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async _postWithRetry(payload) {
+    let lastErr;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await this._post(payload);
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (err.status === 429 && attempt < MAX_RETRIES) {
+          const wait = attempt * 5000;
+          logger.warn(`Teams rate limited — retry ${attempt}/${MAX_RETRIES} in ${wait}ms`);
+          await sleep(wait);
+          continue;
+        }
+        throw new Error(err.message.replace(/https?:\/\/[^\s]+/g, '[URL_REDACTED]'));
+      }
+    }
+    throw lastErr;
   }
 
   async sendMessage(message) {
@@ -43,15 +95,7 @@ class TeamsSender {
       ]
     };
 
-    const res = await fetch(this.webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-      throw new Error(`Teams webhook error: HTTP ${res.status}`);
-    }
+    await this._postWithRetry(payload);
   }
 
   async sendAdaptiveCard(article, summary, isCritical = false, threatIntel = null) {
@@ -129,16 +173,17 @@ class TeamsSender {
       ]
     };
 
-    const res = await fetch(this.webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
+    try {
+      await this._postWithRetry(payload);
+    } catch (err) {
+      logger.warn(`Teams Adaptive Card failed, retrying as plain text: ${err.message}`);
       await this.sendMessage(`${article.title}\n${summary}\n${article.url}`);
     }
   }
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 module.exports = TeamsSender;

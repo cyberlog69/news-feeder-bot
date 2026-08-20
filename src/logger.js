@@ -32,14 +32,18 @@ function ensureLogDir() {
 
 function pruneOldLogs() {
   try {
-    const files = fs.readdirSync(LOG_DIR)
-      .filter((f) => f.startsWith('bot-') && f.endsWith('.log'))
-      .sort();
-    // Delete files beyond the retention window
-    while (files.length > MAX_LOG_DAYS) {
-      const oldest = files.shift();
-      try { fs.unlinkSync(path.join(LOG_DIR, oldest)); } catch {}
-    }
+    const prune = (prefix) => {
+      const files = fs.readdirSync(LOG_DIR)
+        .filter((f) => f.startsWith(prefix) && f.endsWith('.log'))
+        .sort();
+      // Delete files beyond the retention window
+      while (files.length > MAX_LOG_DAYS) {
+        const oldest = files.shift();
+        try { fs.unlinkSync(path.join(LOG_DIR, oldest)); } catch {}
+      }
+    };
+    prune('bot-');      // runtime logs
+    prune('audit-');    // SIEM / SOC audit logs
   } catch {}
 }
 

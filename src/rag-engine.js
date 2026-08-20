@@ -35,11 +35,13 @@ async function answerQuestion(question) {
 }
 
 /**
- * AI RAG Synthesis using Groq/Gemini/OpenRouter.
+ * AI RAG Synthesis using Groq / Gemini / OpenRouter.
+ * Any configured provider is used; falls back to extractive when none succeed.
  */
 async function callAiRagSynthesis(question, results) {
-  const apiKey = process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY;
-  if (!apiKey) return null;
+  if (!process.env.GROQ_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENROUTER_API_KEY) {
+    return null;
+  }
 
   const contextText = results.map((r, i) => {
     return `[Article ${i + 1}] Title: ${r.article.title}\nSource: ${r.article.source}\nSummary: ${r.article.summary}\nURL: ${r.article.url}`;
@@ -51,23 +53,82 @@ async function callAiRagSynthesis(question, results) {
     `User Question: ${question}\n\n` +
     `Context Articles:\n${contextText}`;
 
+  const attempts = [];
+
   if (process.env.GROQ_API_KEY) {
-    const res = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.2,
-        max_tokens: 500
-      })
-    }, 12000);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.choices?.[0]?.message?.content?.trim() || null;
+    attempts.push(() => callGroqRag(prompt));
+  }
+  if (process.env.GEMINI_API_KEY) {
+    attempts.push(() => callGeminiRag(prompt));
+  }
+  if (process.env.OPENROUTER_API_KEY) {
+    attempts.push(() => callOpenRouterRag(prompt));
+  }
+
+  for (const attempt of attempts) {
+    try {
+      const answer = await attempt();
+      if (answer) return answer;
+    } catch (err) {
+      logger.warn(`RAG synthesis attempt failed: ${err.message.split('\n')[0]}`);
+    }
   }
 
   return null;
+}
+
+async function callGroqRag(prompt) {
+  const res = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      max_tokens: 500
+    })
+  }, 12000);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content?.trim() || null;
+}
+
+async function callGeminiRag(prompt) {
+  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const res = await fetchWithTimeout(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 500, temperature: 0.2 }
+    })
+  }, 15000);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+}
+
+async function callOpenRouterRag(prompt) {
+  const model = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+  const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://github.com/cyberlog69/news-feeder-bot',
+      'X-Title': 'News Feeder Bot'
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      max_tokens: 500
+    })
+  }, 15000);
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content?.trim() || null;
 }
 
 /**

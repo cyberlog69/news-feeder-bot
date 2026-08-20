@@ -206,7 +206,7 @@ Fly.io runs Docker containers near your users with persistent NVMe volumes.
 
 5. **Set Secrets and Deploy**:
    ```bash
-   fly secrets set TELEGRAM_BOT_TOKEN="your-token" TELEGRAM_CHAT_ID="your-chat-id" GROQ_API_KEY="your-groq-key"
+   fly secrets set TELEGRAM_BOT_TOKEN="your-token" TELEGRAM_TARGET="your-chat-id-or-@channel" GROQ_API_KEY="your-groq-key"
    fly deploy
    ```
 

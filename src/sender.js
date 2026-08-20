@@ -78,10 +78,21 @@ class WhatsAppSender {
     this.client         = null;
     this._readyResolve  = null;
     this._readyPromise  = new Promise((resolve) => { this._readyResolve = resolve; });
+    this._reconnecting  = false;
+    this._reconnectAttempts = 0;
+    this._destroyed     = false;
+  }
+
+  /** Reset the ready promise so post-reconnect waiters block again. */
+  _resetReadyPromise() {
+    this._readyPromise = new Promise((resolve) => { this._readyResolve = resolve; });
   }
 
   /** Initialize the WhatsApp client and begin authentication. */
   async initialize() {
+    this._reconnecting = false;
+    this._reconnectAttempts = 0;
+    this._resetReadyPromise();
     const chromePath = findChrome();
     if (chromePath) {
       logger.info(`Using Chrome: ${chromePath}`);
@@ -145,6 +156,7 @@ class WhatsAppSender {
     this.client.on('ready', async () => {
       console.log('');
       logger.success('WhatsApp client READY');
+      this._reconnectAttempts = 0;
 
       try {
         this.resolvedChatId = await this._resolveTarget(this.target);
@@ -161,15 +173,50 @@ class WhatsAppSender {
     this.client.on('auth_failure', (msg) => {
       logger.error(`WhatsApp authentication FAILED: ${msg}`);
       logger.warn('Delete the .wwebjs_auth folder and restart to re-scan QR.');
+      // Resolve the ready promise so any waiters stop hanging
+      if (!this.isReady) this._readyResolve();
     });
 
     this.client.on('disconnected', (reason) => {
       logger.warn(`WhatsApp disconnected: ${reason}`);
       this.isReady = false;
+      this._scheduleReconnect();
     });
 
     logger.info('Starting WhatsApp client (this may take ~30 seconds)...');
     await this.client.initialize();
+  }
+
+  /**
+   * Schedule an automatic reconnection with exponential backoff.
+   * Prevents a transient disconnect from silently killing WhatsApp delivery
+   * until the process is restarted.
+   */
+  async _scheduleReconnect() {
+    if (this._reconnecting || this._destroyed) return;
+    this._reconnecting = true;
+
+    const delay = Math.min(15000 * Math.pow(2, this._reconnectAttempts), 300000);
+    const attempt = this._reconnectAttempts + 1;
+    logger.warn(`WhatsApp reconnecting in ${Math.round(delay / 1000)}s (attempt ${attempt})...`);
+
+    await sleep(delay);
+    this._reconnectAttempts = attempt;
+
+    try {
+      if (this.client) {
+        await this.client.destroy().catch(() => {});
+        this.client = null;
+      }
+      this._destroyed = false;
+      await this.initialize();
+      logger.success('WhatsApp client re-initialized after disconnect');
+    } catch (err) {
+      logger.error(`WhatsApp reconnect attempt ${attempt} failed: ${err.message.split('\n')[0]}`);
+      this._reconnecting = false;
+      // Keep retrying with backoff
+      setTimeout(() => this._scheduleReconnect(), 30000);
+    }
   }
 
   /**
@@ -248,8 +295,14 @@ class WhatsAppSender {
 
   /** Gracefully shut down the client. */
   async destroy() {
+    this._destroyed = true;
     if (this.client) await this.client.destroy().catch(() => {});
+    this.client = null;
   }
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 module.exports = WhatsAppSender;

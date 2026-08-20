@@ -4,6 +4,8 @@
 
 const logger = require('./logger');
 
+const MAX_RETRIES = 3;
+
 class SlackSender {
   /**
    * @param {string} webhookUrl - Slack Incoming Webhook URL
@@ -23,21 +25,61 @@ class SlackSender {
     logger.success('Slack webhook client initialized');
   }
 
+  async _post(payload, timeoutMs = 15000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(this.webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        const err = new Error(`Slack webhook error: HTTP ${res.status} — ${errText.slice(0, 200)}`);
+        err.status = res.status;
+        throw err;
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error(`Slack webhook timeout after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async _postWithRetry(payload) {
+    let lastErr;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await this._post(payload);
+        return;
+      } catch (err) {
+        lastErr = err;
+        if (err.status === 429 && attempt < MAX_RETRIES) {
+          const wait = attempt * 5000;
+          logger.warn(`Slack rate limited — retry ${attempt}/${MAX_RETRIES} in ${wait}ms`);
+          await sleep(wait);
+          continue;
+        }
+        // Redact the webhook URL from any surfaced error (contains a token)
+        throw new Error(err.message.replace(/https?:\/\/[^\s]+/g, '[URL_REDACTED]'));
+      }
+    }
+    throw lastErr;
+  }
+
   async sendMessage(message) {
     const payload = {
       text: message.replace(/<[^>]{0,500}>/g, ''),
       username: this.username
     };
-
-    const res = await fetch(this.webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-      throw new Error(`Slack webhook error: HTTP ${res.status}`);
-    }
+    await this._postWithRetry(payload);
   }
 
   async sendBlockKit(article, summary, isCritical = false, threatIntel = null) {
@@ -93,16 +135,17 @@ class SlackSender {
       blocks
     };
 
-    const res = await fetch(this.webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
+    try {
+      await this._postWithRetry(payload);
+    } catch (err) {
+      logger.warn(`Slack Block Kit failed, retrying as plain text: ${err.message}`);
       await this.sendMessage(`${headerText}\n${summary}\n${article.url}`);
     }
   }
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 module.exports = SlackSender;

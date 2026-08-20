@@ -40,7 +40,7 @@ services:
       # - key: WHATSAPP_TARGET
       #   sync: false
       # - key: WWEBJS_AUTH_PATH
-      #   value: /data/.wwebjs_auth
+      #   value: /app/data/.wwebjs_auth
 
     # Persistent disk (required for WhatsApp auth session + article history)
     # ⚠️  Paid feature on Render ($0.25/GB/month)

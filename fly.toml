@@ -45,5 +45,11 @@ primary_region = "sin"         # Singapore (closest to India)
   destination = "/app/data"
   initial_size = "1gb"
 
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  # Persist WhatsApp session on the persistent volume so the bot stays logged in across restarts
+  WWEBJS_AUTH_PATH = "/app/data/.wwebjs_auth"
+
 # Secrets are set via CLI: fly secrets set GEMINI_API_KEY=xxx
 # Never put real secrets in fly.toml

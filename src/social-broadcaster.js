@@ -4,6 +4,18 @@
 
 const logger = require('./logger');
 
+const DEFAULT_TIMEOUT_MS = 15000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Format a social media alert post with hashtags and link.
  *
@@ -68,7 +80,7 @@ async function broadcastToMastodon(article, summary, opts = {}) {
   const statusText = formatSocialPost(article, summary, 500);
 
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -109,11 +121,11 @@ async function broadcastToBluesky(article, summary, opts = {}) {
 
   try {
     // 1. Authenticate with AT Protocol
-    const sessionRes = await fetch('https://bsky.social/xrpc/com.atproto.server.createSession', {
+    const sessionRes = await fetchWithTimeout('https://bsky.social/xrpc/com.atproto.server.createSession', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier, password })
-    });
+    }, 10000);
 
     if (!sessionRes.ok) {
       logger.warn(`[Social] Bluesky authentication failed (${sessionRes.status})`);
@@ -124,7 +136,7 @@ async function broadcastToBluesky(article, summary, opts = {}) {
     const statusText = formatSocialPost(article, summary, 300);
 
     // 2. Create post record
-    const postRes = await fetch('https://bsky.social/xrpc/com.atproto.repo.createRecord', {
+    const postRes = await fetchWithTimeout('https://bsky.social/xrpc/com.atproto.repo.createRecord', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${session.accessJwt}`,
@@ -138,7 +150,7 @@ async function broadcastToBluesky(article, summary, opts = {}) {
           createdAt: new Date().toISOString()
         }
       })
-    });
+    }, 15000);
 
     if (postRes.ok) {
       logger.success('[Social] Published to Bluesky');

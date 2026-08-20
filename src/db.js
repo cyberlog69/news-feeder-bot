@@ -221,6 +221,90 @@ function getTotalSeenCount() {
   return row ? row.count : 0;
 }
 
+// ── Article Archive API ─────────────────────────────────────────────────────────
+
+/**
+ * Paginated article archive for the dashboard's History tab.
+ * @param {number} [limit=50]
+ * @param {number} [offset=0]
+ * @returns {Array<object>}
+ */
+function getArticleArchive(limit = 50, offset = 0) {
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT url, title, source, sent_at as sentAt
+    FROM seen_articles
+    ORDER BY sent_at DESC
+    LIMIT ? OFFSET ?
+  `);
+  return stmt.all(limit, offset);
+}
+
+/**
+ * Search the article archive by keyword (title/source) with pagination.
+ * @param {string} keyword
+ * @param {number} [limit=20]
+ * @param {number} [offset=0]
+ * @returns {{ results: Array<object>, total: number }}
+ */
+function searchArticleArchive(keyword, limit = 20, offset = 0) {
+  const database = initDb();
+  const pattern = `%${keyword}%`;
+
+  const total = database.prepare(
+    'SELECT COUNT(*) as count FROM seen_articles WHERE title LIKE ? OR source LIKE ?'
+  ).get(pattern, pattern).count;
+
+  const results = database.prepare(`
+    SELECT url, title, source, sent_at as sentAt
+    FROM seen_articles
+    WHERE title LIKE ? OR source LIKE ?
+    ORDER BY sent_at DESC
+    LIMIT ? OFFSET ?
+  `).all(pattern, pattern, limit, offset);
+
+  return { results, total };
+}
+
+/**
+ * Trend analytics for the dashboard's Analytics tab.
+ * @param {number} [days=14] - Window in days
+ * @returns {object} { total, bySource: [{source, count}], byDay: [{date, count}] }
+ */
+function getArticleTrends(days = 14) {
+  const database = initDb();
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const totalRow = database.prepare('SELECT COUNT(*) as count FROM seen_articles').get();
+
+  const bySource = database.prepare(`
+    SELECT source, COUNT(*) as count
+    FROM seen_articles
+    WHERE sent_at >= ?
+    GROUP BY source
+    ORDER BY count DESC
+  `).all(cutoff);
+
+  // Fill every day in the window so charts have contiguous points
+  const byDayRows = database.prepare(`
+    SELECT substr(sent_at, 1, 10) as date, COUNT(*) as count
+    FROM seen_articles
+    WHERE sent_at >= ?
+    GROUP BY substr(sent_at, 1, 10)
+    ORDER BY date ASC
+  `).all(cutoff);
+
+  const byDayMap = new Map(byDayRows.map((r) => [r.date, r.count]));
+  const byDay = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+    const key = d.toISOString().slice(0, 10);
+    byDay.push({ date: key, count: byDayMap.get(key) || 0 });
+  }
+
+  return { total: totalRow.count, days, bySource, byDay };
+}
+
 // ── Summary Cache API ─────────────────────────────────────────────────────────
 
 function getCachedSummary(url) {
@@ -433,6 +517,9 @@ module.exports = {
   getSeenArticles,
   searchSeenArticles,
   getTotalSeenCount,
+  getArticleArchive,
+  searchArticleArchive,
+  getArticleTrends,
   getCachedSummary,
   setCachedSummary,
   getCveCache,

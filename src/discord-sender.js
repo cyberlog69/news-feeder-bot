@@ -14,6 +14,7 @@
 const logger = require('./logger');
 
 const DISCORD_MAX_LENGTH = 2000;   // Discord message character limit
+const MAX_RETRIES        = 5;      // hard cap on 429 rate-limit retries
 
 class DiscordSender {
   /**
@@ -29,7 +30,7 @@ class DiscordSender {
   }
 
   // ── Private: POST to webhook ──────────────────────────────────────────────
-  async _post(body, timeoutMs = 15000) {
+  async _post(body, timeoutMs = 15000, retryCount = 0) {
     const controller = new AbortController();
     const timer      = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -44,12 +45,16 @@ class DiscordSender {
       // 204 No Content = success for Discord webhooks
       if (res.status === 204 || res.ok) return;
 
-      // Rate limited — read retry-after header
+      // Rate limited — read retry-after header (bounded retries, with backoff)
       if (res.status === 429) {
         const retryAfter = parseFloat(res.headers.get('retry-after') || '5');
-        logger.warn(`Discord rate limited — waiting ${retryAfter}s`);
-        await sleep(retryAfter * 1000);
-        return this._post(body, timeoutMs);
+        if (retryCount >= MAX_RETRIES) {
+          throw new Error(`Discord rate limited — giving up after ${MAX_RETRIES} retries (HTTP 429)`);
+        }
+        const wait = Math.min(retryAfter, 60);
+        logger.warn(`Discord rate limited — waiting ${wait}s (retry ${retryCount + 1}/${MAX_RETRIES})`);
+        await sleep(wait * 1000);
+        return this._post(body, timeoutMs, retryCount + 1);
       }
 
       const text = await res.text().catch(() => 'no body');

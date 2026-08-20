@@ -13,6 +13,8 @@
 
 const Parser  = require('rss-parser');
 const { extract } = require('@extractus/article-extractor');
+const dns     = require('dns/promises');
+const net     = require('net');
 const logger  = require('./logger');
 
 // ── SSRF Protection ───────────────────────────────────────────────────────────
@@ -28,14 +30,83 @@ const PRIVATE_IP_PATTERNS = [
   /^fe80:/i,
 ];
 
+/**
+ * Check whether an IP literal is private / reserved / link-local.
+ * Handles both IPv4 and IPv6, including IPv4-mapped IPv6.
+ * @param {string} ip
+ * @returns {boolean}
+ */
+function isPrivateIp(ip) {
+  if (!ip) return false;
+  const addr = String(ip).toLowerCase().trim();
+
+  // IPv4-mapped IPv6 (::ffff:10.0.0.1) → check the embedded IPv4
+  const v4mapped = addr.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (v4mapped) return isPrivateIp(v4mapped[1]);
+
+  if (net.isIPv4(addr)) {
+    const [a, b, c] = addr.split('.').map(Number);
+    if (a === 0)                     return true;  // 0.0.0.0/8 "this network"
+    if (a === 10)                    return true;  // 10.0.0.0/8
+    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 CGNAT
+    if (a === 127)                   return true;  // 127.0.0.0/8 loopback
+    if (a === 169 && b === 254)      return true;  // 169.254.0.0/16 link-local
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 0 && c === 0)  return true; // 192.0.0.0/24
+    if (a === 192 && b === 0 && c === 2)  return true; // 192.0.2.0/24 TEST-NET-1
+    if (a === 192 && b === 168)      return true;  // 192.168.0.0/16
+    if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15 benchmarking
+    if (a === 198 && b === 51 && c === 100) return true;  // 198.51.100.0/24 TEST-NET-2
+    if (a === 203 && b === 0 && c === 113)  return true;  // 203.0.113.0/24 TEST-NET-3
+    if (a >= 224)                    return true;  // 224.0.0.0/4 multicast + reserved
+    return false;
+  }
+
+  if (net.isIPv6(addr)) {
+    if (addr === '::' || addr === '::1')      return true; // unspecified + loopback
+    if (addr.startsWith('fc') || addr.startsWith('fd')) return true; // fc00::/7 ULA
+    if (addr.startsWith('fe8') || addr.startsWith('fe9') || addr.startsWith('fea') || addr.startsWith('feb')) return true; // fe80::/10 link-local
+    if (addr.startsWith('2001:db8'))          return true; // 2001:db8::/32 documentation
+    if (addr.startsWith('2001:10') || addr.startsWith('2001:20')) return true; // ORCHID
+    return false;
+  }
+
+  return false;
+}
+
 function isSafeUrl(url) {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
     const hostname = parsed.hostname;
     if (PRIVATE_IP_PATTERNS.some((p) => p.test(hostname))) return false;
+    // If the hostname is itself an IP literal, validate it exhaustively
+    if (net.isIP(hostname)) return !isPrivateIp(hostname);
     return true;
   } catch {
+    return false;
+  }
+}
+
+/**
+ * Async SSRF validation: resolves the hostname via DNS and blocks the request
+ * if ANY resolved address is private/reserved. Mitigates DNS-rebinding attacks
+ * (e.g. hostnames that resolve to 127.0.0.1 / 169.254.169.254 at fetch time).
+ * @param {string} url
+ * @returns {Promise<boolean>}
+ */
+async function resolveSafeUrl(url) {
+  if (!isSafeUrl(url)) return false;
+
+  try {
+    const hostname = new URL(url).hostname;
+    if (net.isIP(hostname)) return !isPrivateIp(hostname);
+
+    const addresses = await dns.lookup(hostname, { all: true });
+    if (!addresses || addresses.length === 0) return false;
+    return addresses.every((entry) => !isPrivateIp(entry.address));
+  } catch {
+    // DNS resolution failure → treat as unsafe rather than risk SSRF
     return false;
   }
 }
@@ -74,6 +145,14 @@ async function fetchSource(source) {
   if (!isSafeUrl(rssUrl)) {
     logger.warn(`Skipping source "${source.name}": invalid or unsafe RSS URL`);
     recordFeedHealth(source.name, rssUrl, 'Invalid URL', 0, Date.now() - startTime, 0);
+    return [];
+  }
+
+  // DNS-rebinding defense: resolve hostname and block if it points anywhere private
+  const safeResolved = await resolveSafeUrl(rssUrl);
+  if (!safeResolved) {
+    logger.warn(`Skipping source "${source.name}": RSS URL resolves to a private/reserved address (SSRF)`);
+    recordFeedHealth(source.name, rssUrl, 'SSRF Blocked', 0, Date.now() - startTime, 0);
     return [];
   }
 
@@ -196,6 +275,7 @@ async function fetchAllSources(sources) {
  */
 async function getFullArticleText(url) {
   if (!isSafeUrl(url)) return null;
+  if (!(await resolveSafeUrl(url))) return null;
 
   try {
     const article = await extract(url, {}, { timeout: 12000 });
@@ -221,4 +301,4 @@ function cleanText(str) {
     .trim();
 }
 
-module.exports = { fetchAllSources, getFullArticleText, isSafeUrl, getFeedHealth };
+module.exports = { fetchAllSources, getFullArticleText, isSafeUrl, resolveSafeUrl, isPrivateIp, getFeedHealth };

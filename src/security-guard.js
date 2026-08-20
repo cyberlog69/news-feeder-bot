@@ -42,8 +42,13 @@ function validateToken(providedToken, requiredRole = 'analyst') {
   const analystToken = (process.env.ANALYST_TOKEN || '').trim();
   const auditorToken = (process.env.AUDITOR_TOKEN || '').trim();
 
-  // If no tokens configured, open in development mode
-  if (!adminToken && !analystToken && !auditorToken) return true;
+  // If no tokens are configured: open in development, FAIL CLOSED in production.
+  // A production deployment that forgets to set tokens must NOT silently
+  // expose administrative endpoints.
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!adminToken && !analystToken && !auditorToken) {
+    return !isProduction;
+  }
 
   // Admin token has access to everything
   if (adminToken && timingSafeEqual(token, adminToken)) return true;

@@ -1,6 +1,6 @@
 // src/email-sender.js
 // HTML Email Newsletter Sender
-// Delivers dark-themed HTML email newsletters via SendGrid/Resend REST API or SMTP.
+// Delivers dark-themed HTML email newsletters via SendGrid / Resend REST API or SMTP (nodemailer).
 
 const logger = require('./logger');
 
@@ -9,11 +9,27 @@ class EmailSender {
    * @param {object} config - { apiKey, fromEmail, toEmail, provider }
    */
   constructor(config = {}) {
-    this.apiKey    = config.apiKey || process.env.EMAIL_API_KEY || '';
     this.fromEmail = config.fromEmail || process.env.EMAIL_FROM || 'newsbot@example.com';
     this.toEmail   = config.toEmail || process.env.EMAIL_TO || '';
     this.provider  = (config.provider || process.env.EMAIL_PROVIDER || 'sendgrid').toLowerCase().trim();
     this.type      = 'email';
+
+    // Provider-specific API key: SENDGRID_API_KEY / RESEND_API_KEY,
+    // falling back to the legacy EMAIL_API_KEY for backward compatibility.
+    if (this.provider === 'resend') {
+      this.apiKey = config.apiKey || process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || '';
+    } else if (this.provider === 'smtp') {
+      this.apiKey = config.apiKey || '';
+    } else {
+      this.apiKey = config.apiKey || process.env.SENDGRID_API_KEY || process.env.EMAIL_API_KEY || '';
+    }
+
+    // SMTP settings (used when provider === 'smtp')
+    this.smtpHost  = config.smtpHost || process.env.SMTP_HOST || '';
+    this.smtpPort  = parseInt(config.smtpPort || process.env.SMTP_PORT || '587', 10);
+    this.smtpUser  = config.smtpUser || process.env.SMTP_USER || '';
+    this.smtpPass  = config.smtpPass || process.env.SMTP_PASS || '';
+    this.smtpSecure = config.smtpSecure !== undefined ? config.smtpSecure : (this.smtpPort === 465);
   }
 
   async initialize() {
@@ -21,7 +37,10 @@ class EmailSender {
     if (!this.toEmail) {
       throw new Error('EMAIL_TO environment variable is required for Email Sender.');
     }
-    logger.success(`Email Newsletter Sender initialized: -> ${this.toEmail}`);
+    if (this.provider === 'smtp' && !this.smtpHost) {
+      throw new Error('SMTP_HOST is required when EMAIL_PROVIDER=smtp.');
+    }
+    logger.success(`Email Newsletter Sender initialized (${this.provider}): -> ${this.toEmail}`);
   }
 
   /**
@@ -35,7 +54,7 @@ class EmailSender {
     const title = escapeHtml(article.title || '');
     const source = escapeHtml(article.source || '');
     const category = escapeHtml(article.category || 'Security');
-    const url = article.url || '#';
+    const url = (article.url && article.url !== '#') ? escapeHtml(article.url) : '';
     const dateStr = new Date(article.publishedAt || Date.now()).toLocaleString('en-IN');
 
     const bulletItems = summary
@@ -95,11 +114,12 @@ class EmailSender {
           ${bulletItems}
         </ul>
       </div>
+      ${url ? `
       <div style="text-align:center;margin-top:24px;">
         <a href="${url}" target="_blank" style="background-color:#3b82f6;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:600;font-size:14px;display:inline-block;">
           Read Full Article 📖
         </a>
-      </div>
+      </div>` : ''}
     </div>
     <div style="background-color:#0f172a;padding:12px 24px;font-size:12px;color:#64748b;text-align:center;border-top:1px solid #334155;">
       Sent by News Feeder Bot • ${dateStr}
@@ -110,45 +130,107 @@ class EmailSender {
   }
 
   /**
-   * Send HTML email newsletter via SendGrid / Resend REST API.
+   * Send a digest / generic message as an email newsletter.
+   * Builds a proper newsletter body from the message text.
    */
   async sendMessage(message) {
-    // Send as simple formatted text message if HTML not explicitly called
-    const article = { title: 'News Feeder Update', source: 'Bot', category: 'General', url: '#' };
-    await this.sendEmail(article, message, null);
+    const article = {
+      title: 'News Feeder Daily Digest',
+      source: 'News Feeder Bot',
+      category: 'Digest',
+      url: '',
+      publishedAt: new Date().toISOString()
+    };
+    await this.sendEmail(article, String(message || '').trim(), null);
   }
 
   async sendEmail(article, summary, threatIntel = null) {
     const html = this.buildHtmlEmailTemplate(article, summary, threatIntel);
     const subject = `[News Alert] ${article.title}`;
 
-    if (!this.apiKey) {
+    if (!this.apiKey && this.provider !== 'smtp') {
       logger.info(`[Email Demo] Would send email to ${this.toEmail}: "${subject}"`);
       return;
     }
 
-    // SendGrid REST API send
     if (this.provider === 'sendgrid') {
-      const res = await fetchWithTimeout('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: this.toEmail }] }],
-          from: { email: this.fromEmail },
-          subject: subject,
-          content: [{ type: 'text/html', value: html }]
-        })
-      }, 10000);
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error(`SendGrid API error: HTTP ${res.status} — ${errText.slice(0, 200)}`);
-      }
-      logger.success(`[Email] Newsletter sent via SendGrid to ${this.toEmail}`);
+      await this._sendViaSendGrid(subject, html);
+    } else if (this.provider === 'resend') {
+      await this._sendViaResend(subject, html);
+    } else if (this.provider === 'smtp') {
+      await this._sendViaSmtp(subject, html);
+    } else {
+      logger.warn(`[Email] Unknown EMAIL_PROVIDER "${this.provider}" — no email sent.`);
     }
+  }
+
+  async _sendViaSendGrid(subject, html) {
+    const res = await fetchWithTimeout('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: this.toEmail }] }],
+        from: { email: this.fromEmail },
+        subject,
+        content: [{ type: 'text/html', value: html }]
+      })
+    }, 10000);
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`SendGrid API error: HTTP ${res.status} — ${errText.slice(0, 200)}`);
+    }
+    logger.success(`[Email] Newsletter sent via SendGrid to ${this.toEmail}`);
+  }
+
+  async _sendViaResend(subject, html) {
+    const res = await fetchWithTimeout('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: this.fromEmail,
+        to: [this.toEmail],
+        subject,
+        html
+      })
+    }, 10000);
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Resend API error: HTTP ${res.status} — ${errText.slice(0, 200)}`);
+    }
+    logger.success(`[Email] Newsletter sent via Resend to ${this.toEmail}`);
+  }
+
+  async _sendViaSmtp(subject, html) {
+    // SMTP requires the optional 'nodemailer' dependency
+    let nodemailer;
+    try {
+      nodemailer = require('nodemailer');
+    } catch {
+      throw new Error('EMAIL_PROVIDER=smtp requires the "nodemailer" package. Run: npm install nodemailer');
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: this.smtpHost,
+      port: this.smtpPort,
+      secure: this.smtpSecure,
+      auth: this.smtpUser ? { user: this.smtpUser, pass: this.smtpPass } : undefined
+    });
+
+    await transporter.sendMail({
+      from: this.fromEmail,
+      to: this.toEmail,
+      subject,
+      html
+    });
+    logger.success(`[Email] Newsletter sent via SMTP (${this.smtpHost}) to ${this.toEmail}`);
   }
 }
 

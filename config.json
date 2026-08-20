@@ -91,7 +91,11 @@
     "summaryBulletPoints": 3,
     "delayBetweenMessagesSec": 3,
     "healthCheckHour": 8,
-    "dashboardPort": 3000
+    "dashboardPort": 3000,
+    "maintenanceHour": 3,
+    "backupRetentionDays": 30,
+    "enableThreatOps": true,
+    "threatOpsHour": 2
   },
   "filters": {
     "enabled": false,

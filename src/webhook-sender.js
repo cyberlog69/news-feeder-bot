@@ -1,7 +1,10 @@
 // src/webhook-sender.js
 // Outbound Webhook Sender for SOAR / SIEM Integration
 // Exports structured JSON security payloads to external automation endpoints (n8n, Zapier, Splunk, Shuffle).
+// When OUTBOUND_WEBHOOK_SECRET is set, the payload is HMAC-SHA256 signed so the
+// receiving endpoint can verify authenticity and integrity.
 
+const crypto = require('crypto');
 const logger = require('./logger');
 
 class WebhookSender {
@@ -60,16 +63,21 @@ class WebhookSender {
       return;
     }
 
+    const body = JSON.stringify(payload);
     const headers = { 'Content-Type': 'application/json' };
+
     if (this.secret) {
+      // HMAC-SHA256 signature over the raw body — lets the receiver verify
+      // authenticity and detect tampering (unlike a plaintext shared secret).
+      headers['X-NewsBot-Signature'] = signPayload(payload, this.secret);
       headers['X-NewsBot-Secret'] = this.secret;
-      headers['Authorization']   = `Bearer ${this.secret}`;
+      headers['Authorization'] = `Bearer ${this.secret}`;
     }
 
     const res = await fetchWithTimeout(this.webhookUrl, {
       method: 'POST',
       headers,
-      body: JSON.stringify(payload)
+      body
     }, 10000);
 
     if (!res.ok) {
@@ -91,4 +99,17 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
+/**
+ * Compute the HMAC-SHA256 signature header value for a payload.
+ * @param {object} payload
+ * @param {string} secret
+ * @returns {string} e.g. "sha256=<hex>"
+ */
+function signPayload(payload, secret) {
+  const body = JSON.stringify(payload);
+  const signature = crypto.createHmac('sha256', secret).update(body).digest('hex');
+  return `sha256=${signature}`;
+}
+
 module.exports = WebhookSender;
+module.exports.signPayload = signPayload;

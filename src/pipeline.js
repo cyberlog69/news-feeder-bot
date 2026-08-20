@@ -27,6 +27,8 @@ const { generateAudioSummary }                        = require('./audio-generat
 const { generateAlertCard }                           = require('./card-generator');
 const { indexArticle }                                = require('./vector-store');
 const { clusterArticles, fuseStoryCluster }           = require('./story-clusterer');
+const { getUserSubscription, matchesArticle }         = require('./subscription-manager');
+const { recordAuditEvent }                            = require('./audit-logger');
 const Deduplicator                                    = require('./deduplicator');
 const logger                                          = require('./logger');
 
@@ -148,6 +150,14 @@ class NewsPipeline {
       this._reloadConfig();
 
       logger.section('News Pipeline Run');
+      recordAuditEvent({
+        type: 'PIPELINE_RUN',
+        name: 'News pipeline run started',
+        severity: 'low',
+        actor: 'cron',
+        details: `Fetched sources poll cycle started`,
+        ip: 'internal'
+      });
 
       // ── Step 1: Fetch ────────────────────────────────────────────────────
       const allArticles = await fetchAllSources(this.sources);
@@ -272,6 +282,14 @@ class NewsPipeline {
 
           for (const { name, sender, type } of targetSenders) {
             try {
+              // Per-user / per-channel topic subscription filter
+              const subTargetId = sender.target || sender.chatId || name;
+              const topics = getUserSubscription(subTargetId, type);
+              if (!matchesArticle(topics, article, critical)) {
+                logger.info(`[Subscription] Skipped for ${name} — topics [${topics.join(', ')}] do not match "${article.title.slice(0, 45)}…"`);
+                continue;
+              }
+
               // Resolve per-platform target language setting (e.g. TELEGRAM_LANGUAGE, DISCORD_LANGUAGE)
               const envKey = `${type.toUpperCase().replace(/-/g, '_')}_LANGUAGE`;
               const targetLang = (process.env[envKey] || process.env.DEFAULT_LANGUAGE || 'en').toLowerCase().trim();
@@ -367,6 +385,14 @@ class NewsPipeline {
             this.deduplicator.markSeen(article.url, article.title, article.source);
             indexArticle(article, summary);
             sentCount++;
+
+            // Broadcast critical alerts to Mastodon / Bluesky (social syndication)
+            if (critical) {
+              const { broadcastThreatArticle } = require('./threat-ops');
+              await broadcastThreatArticle(article, summary, true).catch((err) =>
+                logger.warn(`Social broadcast error: ${err.message}`)
+              );
+            }
           }
 
           await sleep(this.delaySec * 1000);
@@ -378,6 +404,14 @@ class NewsPipeline {
 
       const { totalSent } = this.deduplicator.getStats();
       logger.info(`Run complete — sent ${sentCount} now | ${totalSent} total all-time`);
+      recordAuditEvent({
+        type: 'PIPELINE_RUN',
+        name: 'News pipeline run completed',
+        severity: 'low',
+        actor: 'cron',
+        details: `Sent ${sentCount} articles this cycle`,
+        ip: 'internal'
+      });
 
     } finally {
       this.isRunning = false;
