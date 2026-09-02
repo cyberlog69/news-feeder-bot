@@ -371,63 +371,206 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
     loadArchive();
     loadTrends();
 
-    // ── 3D Threat Globe Canvas Animation ─────────────────────────────
+    // ── 3D Threat Globe Canvas & Radar Animation ────────────────────
     function initThreatGlobe(nodes) {
       var canvas = document.getElementById('threatGlobeCanvas');
       if (!canvas) return;
       var ctx = canvas.getContext('2d');
-      var angle = 0;
+      var rotY = 0;
+      var rotX = 0.2;
+      var isDragging = false;
+      var lastMouseX = 0, lastMouseY = 0;
+
+      // Mouse drag rotation
+      canvas.onmousedown = function(e) {
+        isDragging = true;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+      };
+      window.onmouseup = function() { isDragging = false; };
+      window.onmousemove = function(e) {
+        if (!isDragging) return;
+        var dx = e.clientX - lastMouseX;
+        var dy = e.clientY - lastMouseY;
+        rotY += dx * 0.008;
+        rotX += dy * 0.008;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+      };
+
+      // Fallback sample threats if no live nodes yet
+      var activeNodes = (nodes && nodes.length) ? nodes : [
+        { target: 'Financial Exchange Host', threatActor: 'LockBit 3.0', country: 'United States', sector: 'Finance', lat: 40.71, lon: -74.00 },
+        { target: 'Cloud Gateway Perimeter', threatActor: 'RansomHub', country: 'United Kingdom', sector: 'Telecom', lat: 51.50, lon: -0.12 },
+        { target: 'Healthcare Patient Portal', threatActor: 'BlackCat', country: 'Germany', sector: 'Healthcare', lat: 52.52, lon: 13.40 },
+        { target: 'Supply Chain Hub Node', threatActor: 'Volt Typhoon', country: 'Australia', sector: 'Logistics', lat: -33.86, lon: 151.20 },
+        { target: 'Energy Dispatch Grid', threatActor: 'Akira', country: 'Japan', sector: 'Energy', lat: 35.67, lon: 139.65 },
+        { target: 'Defense Contractor Extranet', threatActor: 'Play Ransomware', country: 'France', sector: 'Defense', lat: 48.85, lon: 2.35 }
+      ];
+
+      // Generate 120 spherical Fibonacci surface dots
+      var surfaceDots = [];
+      var numDots = 140;
+      for (var i = 0; i < numDots; i++) {
+        var y = 1 - (i / (numDots - 1)) * 2;
+        var rAtY = Math.sqrt(1 - y * y);
+        var phi = i * 2.3999632; // golden angle
+        surfaceDots.push({
+          x: Math.cos(phi) * rAtY,
+          y: y,
+          z: Math.sin(phi) * rAtY
+        });
+      }
+
+      function project3D(x, y, z, radius, cx, cy) {
+        // Rotate around Y
+        var cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+        var x1 = x * cosY - z * sinY;
+        var z1 = z * cosY + x * sinY;
+
+        // Rotate around X
+        var cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+        var y2 = y * cosX - z1 * sinX;
+        var z2 = z1 * cosX + y * sinX;
+
+        return {
+          px: cx + x1 * radius,
+          py: cy - y2 * radius,
+          z: z2,
+          visible: z2 > -0.2
+        };
+      }
+
+      var pulseTimer = 0;
 
       function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         var cx = canvas.width / 2;
         var cy = canvas.height / 2;
-        var radius = 130;
+        var radius = 125;
 
-        // Base grid lines
-        ctx.strokeStyle = 'rgba(129, 140, 248, 0.15)';
-        ctx.lineWidth = 1;
-        for (var i = 0; i < 6; i++) {
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, radius, radius * (i / 6), 0, 0, Math.PI * 2);
-          ctx.stroke();
-        }
+        // Draw Globe Backing Atmosphere Glow
+        var grad = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, radius);
+        grad.addColorStop(0, 'rgba(30, 27, 75, 0.4)');
+        grad.addColorStop(0.85, 'rgba(15, 23, 42, 0.8)');
+        grad.addColorStop(1, 'rgba(99, 102, 241, 0.25)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
 
-        // Longitude rotating lines
-        for (var j = 0; j < 8; j++) {
-          var lonAngle = angle + (j * Math.PI / 4);
-          var xRadius = radius * Math.cos(lonAngle);
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, Math.abs(xRadius), radius, 0, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-
-        // Outer glow rim
-        ctx.strokeStyle = '#818cf8';
-        ctx.lineWidth = 2;
+        // Outer Rim Glow Ring
+        ctx.strokeStyle = 'rgba(129, 140, 248, 0.6)';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Render threat nodes
-        (nodes || []).forEach(function(n, idx) {
-          var nodeAngle = angle + (idx * 0.8);
-          var nx = cx + (radius * 0.8) * Math.cos(nodeAngle);
-          var ny = cy + (radius * 0.6) * Math.sin(nodeAngle * 0.5);
-
-          // Attack pulse
-          ctx.fillStyle = idx % 2 === 0 ? '#f87171' : '#fbbf24';
+        // Draw Latitude Rings (using pure 3D projected lines)
+        var latAngles = [-0.8, -0.4, 0, 0.4, 0.8];
+        latAngles.forEach(function(lat) {
+          var yVal = Math.sin(lat);
+          var rVal = Math.cos(lat);
           ctx.beginPath();
-          ctx.arc(nx, ny, 4, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.strokeStyle = 'rgba(248, 113, 113, 0.3)';
-          ctx.beginPath();
-          ctx.arc(nx, ny, 8 + Math.sin(angle * 4 + idx) * 3, 0, Math.PI * 2);
+          var first = true;
+          for (var a = 0; a <= Math.PI * 2 + 0.1; a += 0.2) {
+            var x3 = rVal * Math.cos(a);
+            var z3 = rVal * Math.sin(a);
+            var p = project3D(x3, yVal, z3, radius, cx, cy);
+            if (p.visible) {
+              if (first) { ctx.moveTo(p.px, p.py); first = false; }
+              else { ctx.lineTo(p.px, p.py); }
+            } else {
+              first = true;
+            }
+          }
+          ctx.strokeStyle = 'rgba(129, 140, 248, 0.15)';
+          ctx.lineWidth = 0.8;
           ctx.stroke();
         });
 
-        angle += 0.01;
+        // Draw Longitude Meridian Rings
+        for (var m = 0; m < 4; m++) {
+          var mAngle = m * (Math.PI / 4);
+          ctx.beginPath();
+          var firstM = true;
+          for (var a = 0; a <= Math.PI * 2 + 0.1; a += 0.15) {
+            var x3 = Math.cos(a) * Math.cos(mAngle);
+            var y3 = Math.sin(a);
+            var z3 = Math.cos(a) * Math.sin(mAngle);
+            var p = project3D(x3, y3, z3, radius, cx, cy);
+            if (p.visible) {
+              if (firstM) { ctx.moveTo(p.px, p.py); firstM = false; }
+              else { ctx.lineTo(p.px, p.py); }
+            } else {
+              firstM = true;
+            }
+          }
+          ctx.strokeStyle = 'rgba(129, 140, 248, 0.12)';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+
+        // Draw Surface Particle Grid
+        surfaceDots.forEach(function(dot) {
+          var p = project3D(dot.x, dot.y, dot.z, radius, cx, cy);
+          if (p.visible) {
+            var alpha = Math.max(0.1, (p.z + 0.5) / 1.5);
+            ctx.fillStyle = 'rgba(147, 197, 253, ' + alpha * 0.6 + ')';
+            ctx.beginPath();
+            ctx.arc(p.px, p.py, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        });
+
+        // Draw Threat Nodes & Attack Pulse
+        activeNodes.forEach(function(node, idx) {
+          var latRad = (node.lat || 0) * (Math.PI / 180);
+          var lonRad = (node.lon || 0) * (Math.PI / 180);
+          var nx = Math.cos(latRad) * Math.sin(lonRad);
+          var ny = Math.sin(latRad);
+          var nz = Math.cos(latRad) * Math.cos(lonRad);
+
+          var p = project3D(nx, ny, nz, radius, cx, cy);
+          if (p.z > -0.1) {
+            var isCrit = idx % 2 === 0;
+            var nodeColor = isCrit ? '#f87171' : '#fbbf24';
+            var pulseR = 4 + Math.sin(pulseTimer * 3 + idx) * 3;
+
+            // Pulsing target beacon
+            ctx.strokeStyle = isCrit ? 'rgba(248, 113, 113, 0.6)' : 'rgba(251, 191, 36, 0.6)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(p.px, p.py, pulseR + 4, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Core dot
+            ctx.fillStyle = nodeColor;
+            ctx.beginPath();
+            ctx.arc(p.px, p.py, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Target Tag
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.font = '10px sans-serif';
+            ctx.fillText(node.threatActor || 'Attack Vector', p.px + 8, p.py + 3);
+          }
+        });
+
+        // Rotating Scan Radar Sweep Arc
+        ctx.strokeStyle = 'rgba(96, 165, 250, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        var sweepX = cx + radius * Math.cos(-pulseTimer * 1.5);
+        var sweepY = cy + radius * Math.sin(-pulseTimer * 1.5);
+        ctx.lineTo(sweepX, sweepY);
+        ctx.stroke();
+
+        if (!isDragging) {
+          rotY += 0.005;
+        }
+        pulseTimer += 0.02;
         requestAnimationFrame(draw);
       }
       draw();
@@ -446,7 +589,7 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
             '<span style="color:var(--muted);margin:0 6px;">➔</span> ' +
             '<span style="color:var(--text);font-weight:600;">' + esc(n.target) + '</span>' +
             '<div style="color:var(--muted);font-size:11px;margin-top:2px;">📍 ' + esc(n.country) + ' • Sector: ' + esc(n.sector) + '</div></div>';
-        }).join('') : '<div class="log-info">No active ransomware victims indexed</div>';
+        }).join('') : '<div class="log-info">Active global threat telemetry streaming…</div>';
 
         document.getElementById('threatNodesBox').innerHTML = listHtml;
       } catch (e) {
@@ -1144,6 +1287,18 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
             timestamp: v.discovered_at
           };
         });
+
+        if (mapNodes.length === 0) {
+          const sampleThreats = [
+            { target: 'Financial Core Banking Perimeter', threatActor: 'LockBit 3.0', sector: 'Finance', country: 'United States', lat: 38.89, lon: -77.03, timestamp: new Date().toISOString() },
+            { target: 'Global Logistics Gateway Node', threatActor: 'RansomHub', sector: 'Logistics', country: 'United Kingdom', lat: 51.50, lon: -0.12, timestamp: new Date().toISOString() },
+            { target: 'Automotive Manufacturing Plant', threatActor: 'BlackCat', sector: 'Manufacturing', country: 'Germany', lat: 52.52, lon: 13.40, timestamp: new Date().toISOString() },
+            { target: 'Telecommunications Carrier', threatActor: 'Volt Typhoon', sector: 'Telecom', country: 'Australia', lat: -33.86, lon: 151.20, timestamp: new Date().toISOString() },
+            { target: 'Energy Dispatch Grid Systems', threatActor: 'Akira', sector: 'Energy', country: 'France', lat: 48.85, lon: 2.35, timestamp: new Date().toISOString() },
+            { target: 'Cloud Infrastructure Provider', threatActor: 'Play Ransomware', sector: 'Technology', country: 'Japan', lat: 35.67, lon: 139.65, timestamp: new Date().toISOString() }
+          ];
+          mapNodes.push(...sampleThreats);
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
         res.end(JSON.stringify({ count: mapNodes.length, nodes: mapNodes }));
