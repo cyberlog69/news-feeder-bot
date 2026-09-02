@@ -14,9 +14,12 @@ const logger = require('./logger');
  */
 function timingSafeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (!a || !b) return false; // Empty string is never a valid authorization token
 
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
+
+  if (bufA.length === 0 || bufB.length === 0) return false;
 
   if (bufA.length !== bufB.length) {
     // Prevent timing discrepancy on length by comparing with dummy buffer

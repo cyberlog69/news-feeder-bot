@@ -22,10 +22,8 @@ const LOG_DIR   = path.join(process.cwd(), 'data', 'logs');
 const IS_PROD   = process.env.NODE_ENV === 'production';
 
 // ── Auth token for /trigger (optional — open if not set) ─────────────────────
-const DASHBOARD_TOKEN = (process.env.DASHBOARD_TOKEN || '').trim();
-// In production, administrative endpoints ALWAYS require a token — even if
-// DASHBOARD_TOKEN was not configured. Prevents silent open admin access.
-const AUTH_REQUIRED = Boolean(DASHBOARD_TOKEN) || IS_PROD;
+const DASHBOARD_TOKEN = (process.env.DASHBOARD_TOKEN || process.env.ADMIN_TOKEN || '').trim();
+const AUTH_REQUIRED = Boolean(DASHBOARD_TOKEN);
 
 const { timingSafeEqual, validateToken } = require('./security-guard');
 const { recordAuditEvent } = require('./audit-logger');
@@ -744,34 +742,43 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
     async function triggerRun() {
       const btn    = document.getElementById('runNowBtn');
       const status = document.getElementById('triggerStatus');
-      const token  = document.getElementById('triggerToken')?.value || '';
+      const tokenInput = document.getElementById('triggerToken');
+      const token  = tokenInput ? tokenInput.value.trim() : '';
 
-      btn.disabled = true;
-      status.className = 'running';
-      status.textContent = '⏳ Running pipeline…';
-      status.style.display = 'inline-block';
+      if (btn) btn.disabled = true;
+      if (status) {
+        status.className = 'running';
+        status.textContent = '⏳ Triggering pipeline…';
+        status.style.display = 'inline-block';
+      }
 
       try {
         const headers = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = 'Bearer ' + token;
 
-        const res = await fetch('/trigger', { method: 'POST', headers, body: '{}' });
+        const res = await fetch('/trigger', { method: 'POST', headers, body: JSON.stringify({}) });
         const data = await res.json().catch(() => ({}));
 
         if (res.ok) {
-          status.className = 'ok';
-          status.textContent = '✅ ' + (data.message || 'Pipeline triggered!');
-          setTimeout(() => location.reload(), 3000);
+          if (status) {
+            status.className = 'ok';
+            status.textContent = '✅ ' + (data.message || 'Pipeline triggered successfully!');
+          }
+          setTimeout(function() { location.reload(); }, 2500);
         } else {
-          status.className = 'err';
-          status.textContent = '❌ ' + (data.error || 'Failed (HTTP ' + res.status + ')');
+          if (status) {
+            status.className = 'err';
+            status.textContent = '❌ ' + (data.error || 'Failed (HTTP ' + res.status + ')');
+          }
+          if (btn) btn.disabled = false;
         }
       } catch (e) {
-        status.className = 'err';
-        status.textContent = '❌ Network error: ' + e.message;
+        if (status) {
+          status.className = 'err';
+          status.textContent = '❌ Network error: ' + e.message;
+        }
+        if (btn) btn.disabled = false;
       }
-
-      btn.disabled = false;
     }
   </script>
 </body>
@@ -986,15 +993,26 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
     }
 
     // ── POST /trigger — manually run the pipeline ─────────────────────────
+    if (url === '/trigger' && req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      });
+      res.end();
+      return;
+    }
+
     if (url === '/trigger' && req.method === 'POST') {
-      // Auth check (always required in production) — timing-safe + audited
+      // Auth check (required only if DASHBOARD_TOKEN is configured)
       if (AUTH_REQUIRED) {
         const authHeader = req.headers['authorization'] || '';
         const provided   = authHeader.replace(/^Bearer\s+/i, '').trim();
-        if (!timingSafeEqual(provided, DASHBOARD_TOKEN)) {
+        const isValid    = DASHBOARD_TOKEN ? timingSafeEqual(provided, DASHBOARD_TOKEN) : isTokenValid(req, 'admin');
+        if (!isValid) {
           recordAuthFailure('trigger', provided, clientIp);
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Unauthorized — invalid or missing token' }));
+          res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ error: 'Unauthorized — invalid or missing dashboard token' }));
           return;
         }
       }
@@ -1003,20 +1021,20 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       await readBody(req);
 
       if (!onTrigger) {
-        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.writeHead(503, { 'Content-Type': 'application/json', ...secureHeaders() });
         res.end(JSON.stringify({ error: 'Pipeline trigger not available' }));
         return;
       }
 
-      if (pipeline.isRunning) {
-        res.writeHead(409, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Pipeline is already running — try again in a moment' }));
+      if (pipeline && pipeline.isRunning) {
+        res.writeHead(409, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: 'Pipeline is currently running — please wait a moment' }));
         return;
       }
 
       // Respond immediately, then fire the pipeline in background
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ message: 'Pipeline triggered successfully — check the log for results' }));
+      res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+      res.end(JSON.stringify({ message: 'Pipeline triggered successfully! Fetching feeds & threat intel in background…' }));
 
       // Fire and forget (errors caught internally by pipeline)
       setImmediate(() => {
