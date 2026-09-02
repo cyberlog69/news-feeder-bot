@@ -77,9 +77,21 @@ function formatThreatIntelWA(threatIntel) {
         info += ` 🚨 [CISA KEV: ACTIVELY EXPLOITED]`;
         if (c.cisaKev.knownRansomwareUse) info += ` 🏴‍☠️ [RANSOMWARE USE]`;
       }
+      if (c.poc?.hasPoc) {
+        info += ` 🔥 [EXPLOIT POC AVAILABLE]`;
+      }
       return info;
     }).join(', ');
     lines.push(`• *CVEs:* ${cveStr}`);
+  }
+
+  if (threatIntel.watchlist && threatIntel.watchlist.length > 0) {
+    const matchedVendors = [...new Set(threatIntel.watchlist.map((w) => w.keyword))].join(', ');
+    lines.push(`• 🎯 *Org Watchlist Match:* ${escWA(matchedVendors)}`);
+  }
+
+  if (threatIntel.detectionRules?.sigmaYaml) {
+    lines.push(`• ⚡ *Detection Rules:* Sigma & YARA rules generated`);
   }
 
   if (threatIntel.mitre && threatIntel.mitre.length > 0) {
@@ -237,9 +249,21 @@ function formatThreatIntelTelegram(threatIntel) {
         info += ` 🚨 <b>[CISA KEV: ACTIVELY EXPLOITED]</b>`;
         if (c.cisaKev.knownRansomwareUse) info += ` 🏴‍☠️ <b>[RANSOMWARE USE]</b>`;
       }
+      if (c.poc?.hasPoc) {
+        info += ` 🔥 <b>[POC AVAILABLE]</b>`;
+      }
       return info;
     }).join(', ');
     lines.push(`• <b>CVEs:</b> ${cveStr}`);
+  }
+
+  if (threatIntel.watchlist && threatIntel.watchlist.length > 0) {
+    const matchedVendors = [...new Set(threatIntel.watchlist.map((w) => w.keyword))].join(', ');
+    lines.push(`• 🎯 <b>Org Watchlist:</b> <code>${esc(matchedVendors)}</code>`);
+  }
+
+  if (threatIntel.detectionRules?.sigmaYaml) {
+    lines.push(`• ⚡ <b>Detection Rules:</b> <i>Sigma &amp; YARA Ready</i>`);
   }
 
   if (threatIntel.mitre && threatIntel.mitre.length > 0) {

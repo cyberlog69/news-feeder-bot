@@ -98,6 +98,36 @@ function initDb() {
         updated_at TEXT,
         PRIMARY KEY (target_id, platform)
       );
+
+      CREATE TABLE IF NOT EXISTS detection_rules_cache (
+        cve_id TEXT PRIMARY KEY,
+        sigma_yaml TEXT,
+        yara_rule TEXT,
+        created_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS cve_pocs (
+        cve_id TEXT PRIMARY KEY,
+        poc_url TEXT,
+        source TEXT,
+        discovered_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS tech_watchlist (
+        keyword TEXT PRIMARY KEY,
+        category TEXT,
+        added_by TEXT,
+        created_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS podcast_episodes (
+        episode_id TEXT PRIMARY KEY,
+        title TEXT,
+        audio_url TEXT,
+        script TEXT,
+        duration TEXT,
+        created_at TEXT
+      );
     `);
 
     // Migrate legacy JSON files if they exist
@@ -510,6 +540,141 @@ function deleteSubscription(targetId, platform) {
   stmt.run(String(targetId).trim(), String(platform).toLowerCase().trim());
 }
 
+// ── Detection Rules Storage API ───────────────────────────────────────────────
+
+function getCachedDetectionRule(cveId) {
+  if (!cveId) return null;
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT cve_id as cveId, sigma_yaml as sigmaYaml, yara_rule as yaraRule, created_at as createdAt
+    FROM detection_rules_cache
+    WHERE cve_id = ?
+  `);
+  const row = stmt.get(String(cveId).toUpperCase().trim());
+  return row || null;
+}
+
+function setCachedDetectionRule(cveId, sigmaYaml, yaraRule) {
+  if (!cveId) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO detection_rules_cache (cve_id, sigma_yaml, yara_rule, created_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  stmt.run(String(cveId).toUpperCase().trim(), sigmaYaml || '', yaraRule || '', new Date().toISOString());
+}
+
+function getAllDetectionRules(limit = 50) {
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT cve_id as cveId, sigma_yaml as sigmaYaml, yara_rule as yaraRule, created_at as createdAt
+    FROM detection_rules_cache
+    ORDER BY created_at DESC
+    LIMIT ?
+  `);
+  return stmt.all(limit);
+}
+
+// ── CVE Exploit PoC Storage API ───────────────────────────────────────────────
+
+function getCvePoc(cveId) {
+  if (!cveId) return null;
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT cve_id as cveId, poc_url as pocUrl, source, discovered_at as discoveredAt
+    FROM cve_pocs
+    WHERE cve_id = ?
+  `);
+  const row = stmt.get(String(cveId).toUpperCase().trim());
+  return row || null;
+}
+
+function setCvePoc(cveId, pocUrl, source = 'GitHub') {
+  if (!cveId || !pocUrl) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO cve_pocs (cve_id, poc_url, source, discovered_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  stmt.run(String(cveId).toUpperCase().trim(), String(pocUrl).trim(), String(source).trim(), new Date().toISOString());
+}
+
+function getAllCvePocs(limit = 50) {
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT cve_id as cveId, poc_url as pocUrl, source, discovered_at as discoveredAt
+    FROM cve_pocs
+    ORDER BY discovered_at DESC
+    LIMIT ?
+  `);
+  return stmt.all(limit);
+}
+
+// ── Technology Watchlist Storage API ──────────────────────────────────────────
+
+function getWatchlist() {
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT keyword, category, added_by as addedBy, created_at as createdAt
+    FROM tech_watchlist
+    ORDER BY created_at DESC
+  `);
+  return stmt.all();
+}
+
+function addWatchlistKeyword(keyword, category = 'General', addedBy = 'admin') {
+  if (!keyword) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO tech_watchlist (keyword, category, added_by, created_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  stmt.run(String(keyword).toLowerCase().trim(), String(category).trim(), String(addedBy).trim(), new Date().toISOString());
+}
+
+function removeWatchlistKeyword(keyword) {
+  if (!keyword) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    DELETE FROM tech_watchlist WHERE keyword = ?
+  `);
+  stmt.run(String(keyword).toLowerCase().trim());
+}
+
+// ── Podcast Episodes Storage API ──────────────────────────────────────────────
+
+function savePodcastEpisode(episodeId, title, audioUrl, script, duration = '2m') {
+  if (!episodeId || !title) return;
+  const database = initDb();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO podcast_episodes (episode_id, title, audio_url, script, duration, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(String(episodeId).trim(), String(title).trim(), audioUrl || '', script || '', duration || '2m', new Date().toISOString());
+}
+
+function getLatestPodcastEpisode() {
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT episode_id as episodeId, title, audio_url as audioUrl, script, duration, created_at as createdAt
+    FROM podcast_episodes
+    ORDER BY created_at DESC
+    LIMIT 1
+  `);
+  return stmt.get() || null;
+}
+
+function getAllPodcastEpisodes(limit = 20) {
+  const database = initDb();
+  const stmt = database.prepare(`
+    SELECT episode_id as episodeId, title, audio_url as audioUrl, script, duration, created_at as createdAt
+    FROM podcast_episodes
+    ORDER BY created_at DESC
+    LIMIT ?
+  `);
+  return stmt.all(limit);
+}
+
 module.exports = {
   initDb,
   isUrlSeen,
@@ -535,5 +700,17 @@ module.exports = {
   saveSubscription,
   getSubscription,
   getAllSubscriptions,
-  deleteSubscription
+  deleteSubscription,
+  getCachedDetectionRule,
+  setCachedDetectionRule,
+  getAllDetectionRules,
+  getCvePoc,
+  setCvePoc,
+  getAllCvePocs,
+  getWatchlist,
+  addWatchlistKeyword,
+  removeWatchlistKeyword,
+  savePodcastEpisode,
+  getLatestPodcastEpisode,
+  getAllPodcastEpisodes
 };

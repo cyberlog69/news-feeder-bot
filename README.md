@@ -1,9 +1,9 @@
 <div align="center">
 
-# 📰 News Feeder Bot v3.15.0
+# 📰 News Feeder Bot v3.16.0
 
 ### Autonomous Cybersecurity & Tech Intelligence Platform — Delivered Across 9 Platforms
-#### Threat Intel (CVE/EPSS/IOC/MITRE) · Multi-Language Translation · TTS Voice Summaries · RAG Conversational AI (`/ask`) · RSS Feed Health · 0 Audit Vulnerabilities
+#### Threat Intel (CVE/EPSS/IOC/MITRE) · Sigma & YARA Detection Rules · Exploit PoC Radar · Daily Cyber Podcast · 3D Threat Globe · RAG AI (`/ask`) · 0 Audit Vulnerabilities
 
 [![CI](https://github.com/cyberlog69/news-feeder-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/cyberlog69/news-feeder-bot/actions)
 [![Security](https://img.shields.io/badge/npm%20audit-0%20vulnerabilities-brightgreen)](https://npmjs.com)
@@ -17,45 +17,37 @@
 
 ## 📌 Table of Contents
 
-- [What's New in v3.15.0](#-whats-new-in-v3150)
+- [What's New in v3.16.0](#-whats-new-in-v3160)
 - [Features](#-features)
 - [Supported Delivery Channels](#-supported-delivery-channels)
 - [Quick Start](#-quick-start)
+- [AI Sigma & YARA Detection Rule Generator](#-ai-sigma--yara-rule-generator)
+- [Real-Time Exploit PoC Radar](#-real-time-exploit-poc-radar)
+- [Daily Cyber Threat Podcast & RSS Feed](#-daily-cyber-threat-podcast--rss-feed)
+- [Organization Tech Stack Watchlist](#-organization-tech-stack-watchlist)
+- [Interactive Threat Intel Commands](#-interactive-threat-intel-commands)
+- [3D Interactive Cyber Threat Globe & Radar](#-3d-interactive-cyber-threat-globe--radar)
 - [1-Click Cloud Connect (`connect-gcp.bat`)](#-1-click-cloud-connect)
-- [AI Summarizer & Live Diagnostics (`npm run test-ai`)](#-ai-summarizer--live-diagnostics)
 - [RAG & Conversational AI (`/ask`)](#-rag--conversational-ai-ask-your-news)
 - [Deep Threat Intelligence](#-deep-threat-intelligence)
-- [Multi-Language & Internationalization](#-multi-language--internationalization)
-- [Audio & Multimedia Delivery](#-audio--multimedia-delivery)
-- [Configuration Reference](#️-configuration-reference)
-- [Bot Commands](#-bot-commands)
+- [Bot Commands Reference](#-bot-commands)
 - [Web Dashboard & Administrative APIs](#-web-dashboard--administrative-apis)
-- [Platform Setup Guides](#-platform-setup-guides)
-- [🚀 Multi-Cloud Deployment Guide (DEPLOYMENT.md)](DEPLOYMENT.md)
-- [npm Commands](#-npm-commands)
 - [Automated Unit Testing](#-automated-testing)
 - [Security](#-security)
-- [Troubleshooting](#-troubleshooting)
 
 ---
 
-## 🆕 What's New in v3.15.0
+## 🆕 What's New in v3.16.0
 
 | Module | Details |
 |---|---|
-| ⚡ **1-Click GCP VM Connect (`connect-gcp.bat`)** | Native double-clickable Windows batch script that securely connects directly to your Google Cloud VM (`newsfeedrvm`) with automatic Google Cloud key management, zone resolution (`us-east1-c`), and dynamic IP auto-discovery. |
-| 🔍 **AI Summarizer Diagnostic Suite (`npm run test-ai`)** | Zero-dependency real-time diagnostic CLI verifying active LLM API keys (`Groq`, `Gemini`, `OpenRouter`), querying live `/models` endpoints, measuring synthesis latency (ms), and testing end-to-end natural summary synthesis. |
-| 🤖 **Dynamic Real-Time Model Discovery & Reasoning Filter** | Auto-queries provider `/models` endpoints on Groq & OpenRouter to prioritize flagship chat models (`llama-3.3-70b-versatile`, `gemini-1.5-flash`), eliminating 404 deprecations. Automatically strips chain-of-thought `<think>` tags and planning artifacts. |
-| 🌐 **Zero-Dependency Native Gemini REST** | Migrated Google Gemini to native REST `fetch`, allowing zero-dependency LLM synthesis across host VMs and Docker containers alike without requiring heavy native SDKs. |
-| 🛡️ **Enterprise Security & SIEM Audit** | Role-Based Access Control (RBAC) with constant-time token validation (`admin`, `analyst`, `auditor`), sliding-window IP rate limiting, ArcSight CEF & Elastic ECS audit log exporter (`/api/audit-log`), and automated SQLite backup & VACUUM engine (`/api/db/backup`). |
-| 🌐 **Social & Public Syndication** | Broadcasts critical security alerts to Mastodon/Fediverse and Bluesky (AT Protocol). Exposes public syndication endpoints: RSS 2.0 (`/feed.xml`), Atom 1.0 (`/atom.xml`), and JSON Feed 1.1 (`/feed.json`). |
-| 📑 **Executive CISO Briefings** | Generates strategic CISO executive intelligence reports in Markdown and print/PDF-ready HTML summarizing active CISA KEV zero-days, dark web ransomware disclosures, and tactical recommendations via `/briefing` or `GET /api/ciso-briefing`. |
-| 📊 **Next-Gen SOC Dashboard & Radar** | Military-grade dark glassmorphism SOC console (`http://localhost:3000`) with Threat Telemetry HUD, live CISA KEV & Ransomware victim stream, and REST APIs (`/api/threat-intel`, `/api/subscriptions`, `/api/system-status`). |
-| 👥 **Subscription Topics (`/subscribe`)** | Interactive bot commands (`/subscribe ransomware, cve`, `/unsubscribe`, `/subscriptions`) allowing users, channels, and groups to filter news by specific keywords or categories with SQLite persistence. |
-| 📰 **AI Story Clustering & Master Bulletins** | Automatically identifies overlapping breaking news coverage across multiple feeds using Cosine Similarity on term-frequency vectors and shared CVEs. Merges facts into a single consolidated **Master Bulletin** citing all sources. |
-| 🏴‍☠️ **Live Ransomware & CISA KEV Tracker** | Ingests real-time victim disclosures from dark web ransomware leak portals (LockBit, RansomHub, BlackCat, Akira, Play). Syncs CISA's official *Known Exploited Vulnerabilities* (KEV) catalog with SQLite persistence and warning badges. |
-| 🧠 **RAG & Conversational AI (`/ask`)** | Ask natural language questions via `/ask <question>`. Searches historical news in SQLite using term-frequency vector embeddings and Cosine Similarity, generating cited AI responses. |
-| 🧪 **55/55 Unit Tests** | Automated Node.js native test suite (`npm test`) covering RBAC Security, Rate Limiting, SIEM CEF Logging, DB Maintenance, Social Media, Syndication Feeds, CISO Briefings, SOC Dashboard APIs, Subscriptions, Story Clustering, CISA KEV, Ransomware tracking, RAG, and formatters with 100% pass rate. |
+| 🛡️ **AI Sigma & YARA Rule Generator** | Automatically synthesizes standards-compliant **Sigma Detection Rules (YAML)** (for Splunk, Elastic, Microsoft Sentinel, CrowdStrike) and **YARA Rules** for disclosed CVEs, malware campaigns, and extracted IOCs. Viewable via `/rules <CVE>` and the dashboard hub (`/api/detection-rules`). |
+| 🔥 **Real-Time Exploit PoC Radar** | Real-time weaponization tracker scanning open-source exploit registries (GitHub Public Advisories/PoCs, Exploit-DB, PacketStorm) for matching CVEs with SQLite caching (`/api/pocs`) and alert badges. |
+| 🎯 **Organization Tech Stack Watchlist** | Configure monitored vendor/product tech stacks (e.g. `cisco`, `fortinet`, `nginx`, `vmware`, `aws`, `windows`). Ingested advisories matching your perimeter receive elevated priority alerts (`/watchlist`). |
+| 💬 **Interactive Investigation Commands** | Added 2-way investigative commands across all chat channels: `/lookup <CVE-ID>` (CVSS, EPSS %, CISA KEV, PoC), `/ip <IPv4>` (categorization & defanging), `/hash <MD5|SHA1|SHA256>` (malware lookup), `/watchlist`, and `/rules`. |
+| 🎙️ **Daily Cyber Podcast & RSS Feed** | Synthesizes a structured 2-minute daily executive cyber podcast briefing with intro cues, headline roundups, and tactical takeaways. Exposed via standard Apple Podcasts / Spotify RSS XML feed (`/podcast.xml`) and Web Player. |
+| 🗺️ **3D Interactive Cyber Threat Globe** | Built-in canvas-based 3D rotating Threat Globe on the SOC Dashboard (`http://localhost:3000`) visualizing ransomware victims, threat origins, and real-time attack arcs. |
+| 🧪 **81/81 Passing Unit Tests** | Comprehensive automated test suite (`npm test`) covering Sigma/YARA generation, PoC tracking, Watchlist matching, Podcast generation, and interactive bot commands with 100% pass rate. |
 
 ---
 

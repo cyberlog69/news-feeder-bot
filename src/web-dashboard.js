@@ -214,6 +214,69 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
     </table>
   </section>
 
+  <!-- 3D Global Cyber Threat Globe & Radar -->
+  <section>
+    <h2>🗺️ Interactive 3D Cyber Threat Globe &amp; Attack Radar</h2>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;display:flex;flex-wrap:wrap;gap:20px;align-items:center;">
+      <div style="flex:1;min-width:300px;display:flex;flex-direction:column;align-items:center;">
+        <canvas id="threatGlobeCanvas" width="340" height="340" style="background:#0b0b10;border-radius:50%;box-shadow:0 0 30px rgba(129,140,248,0.25);border:1px solid rgba(129,140,248,0.4);"></canvas>
+        <div style="color:var(--muted);font-size:11px;margin-top:10px;">🌐 Live Autonomous Threat Vector Visualizer (Interactive Canvas)</div>
+      </div>
+      <div style="flex:1;min-width:320px;">
+        <h3 style="color:var(--accent);font-size:16px;margin-bottom:8px;">🏴‍☠️ Active Threat Targets &amp; Victims</h3>
+        <div id="threatNodesBox" style="max-height:280px;overflow-y:auto;font-size:12px;line-height:1.6;">
+          <div class="log-info">Loading real-time telemetry…</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sigma & YARA Detection Rule Hub -->
+  <section>
+    <h2>🛡️ AI Sigma &amp; YARA Detection Rule Hub</h2>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;">
+      <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">Auto-generated detection rules ready to copy-paste into Splunk, Elastic, Microsoft Sentinel, and CrowdStrike.</p>
+      <div id="detectionRulesBox"><div class="log-info">Loading detection rules…</div></div>
+    </div>
+  </section>
+
+  <!-- Real-Time Exploit PoC Radar -->
+  <section>
+    <h2>🔥 Real-Time Exploit PoC Radar (Weaponization Tracker)</h2>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;">
+      <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">Actively indexed Proof-of-Concept exploits discovered across GitHub and public security feeds.</p>
+      <div id="pocRadarBox"><div class="log-info">Loading PoC radar…</div></div>
+    </div>
+  </section>
+
+  <!-- Daily Cyber Podcast Briefing Player -->
+  <section>
+    <h2>🎙️ Daily Cyber Threat Podcast Briefing</h2>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;display:flex;flex-wrap:wrap;gap:20px;align-items:center;">
+      <div style="flex:1;min-width:280px;">
+        <h3 id="podcastTitle" style="color:var(--accent);font-size:15px;margin-bottom:8px;">Daily Cyber Threat Briefing</h3>
+        <p id="podcastScript" style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:12px;max-height:100px;overflow-y:auto;">Loading briefing script…</p>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <a href="/podcast.xml" target="_blank" class="btn" style="background:#818cf8;color:#fff;border-color:#818cf8;">📡 Subscribe RSS (Apple/Spotify)</a>
+          <button class="btn" onclick="playPodcastTTS()">🔊 Read Briefing Audio</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Organization Tech Stack Watchlist Manager -->
+  <section>
+    <h2>🎯 Organization Tech Stack Watchlist</h2>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;">
+      <p style="color:var(--muted);font-size:12px;margin-bottom:12px;">Monitored technologies receive elevated priority alerts when matching zero-days or vulnerabilities are disclosed.</p>
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+        <input id="newTechInput" class="search-input" placeholder="Add vendor / product (e.g. fortinet, cisco, nginx)">
+        <button class="btn btn-run" onclick="addTech()">+ Add Technology</button>
+      </div>
+      <div id="watchlistTagsBox" style="display:flex;gap:8px;flex-wrap:wrap;"><div class="log-info">Loading watchlist…</div></div>
+    </div>
+  </section>
+
   <section>
     <h2>Live Log (today)</h2>
     <div class="log-box">${logHtml || '<div class="log-info">No logs yet today</div>'}</div>
@@ -307,6 +370,177 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
 
     loadArchive();
     loadTrends();
+
+    // ── 3D Threat Globe Canvas Animation ─────────────────────────────
+    function initThreatGlobe(nodes) {
+      var canvas = document.getElementById('threatGlobeCanvas');
+      if (!canvas) return;
+      var ctx = canvas.getContext('2d');
+      var angle = 0;
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        var cx = canvas.width / 2;
+        var cy = canvas.height / 2;
+        var radius = 130;
+
+        // Base grid lines
+        ctx.strokeStyle = 'rgba(129, 140, 248, 0.15)';
+        ctx.lineWidth = 1;
+        for (var i = 0; i < 6; i++) {
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, radius, radius * (i / 6), 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Longitude rotating lines
+        for (var j = 0; j < 8; j++) {
+          var lonAngle = angle + (j * Math.PI / 4);
+          var xRadius = radius * Math.cos(lonAngle);
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, Math.abs(xRadius), radius, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Outer glow rim
+        ctx.strokeStyle = '#818cf8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Render threat nodes
+        (nodes || []).forEach(function(n, idx) {
+          var nodeAngle = angle + (idx * 0.8);
+          var nx = cx + (radius * 0.8) * Math.cos(nodeAngle);
+          var ny = cy + (radius * 0.6) * Math.sin(nodeAngle * 0.5);
+
+          // Attack pulse
+          ctx.fillStyle = idx % 2 === 0 ? '#f87171' : '#fbbf24';
+          ctx.beginPath();
+          ctx.arc(nx, ny, 4, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = 'rgba(248, 113, 113, 0.3)';
+          ctx.beginPath();
+          ctx.arc(nx, ny, 8 + Math.sin(angle * 4 + idx) * 3, 0, Math.PI * 2);
+          ctx.stroke();
+        });
+
+        angle += 0.01;
+        requestAnimationFrame(draw);
+      }
+      draw();
+    }
+
+    async function loadThreatMap() {
+      try {
+        var res = await fetch('/api/threat-map');
+        var data = await res.json();
+        var nodes = data.nodes || [];
+        initThreatGlobe(nodes);
+
+        var listHtml = nodes.length ? nodes.map(function(n) {
+          return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">' +
+            '<span style="color:var(--red);font-weight:700;">🏴‍☠️ ' + esc(n.threatActor) + '</span> ' +
+            '<span style="color:var(--muted);margin:0 6px;">➔</span> ' +
+            '<span style="color:var(--text);font-weight:600;">' + esc(n.target) + '</span>' +
+            '<div style="color:var(--muted);font-size:11px;margin-top:2px;">📍 ' + esc(n.country) + ' • Sector: ' + esc(n.sector) + '</div></div>';
+        }).join('') : '<div class="log-info">No active ransomware victims indexed</div>';
+
+        document.getElementById('threatNodesBox').innerHTML = listHtml;
+      } catch (e) {
+        initThreatGlobe([]);
+      }
+    }
+
+    async function loadDetectionRules() {
+      try {
+        var res = await fetch('/api/detection-rules');
+        var data = await res.json();
+        var rules = data.rules || [];
+        document.getElementById('detectionRulesBox').innerHTML = rules.length ? (
+          '<table><thead><tr><th>CVE / Incident</th><th>Sigma Rule</th><th>YARA Rule</th><th>Action</th></tr></thead><tbody>' +
+          rules.map(function(r) {
+            return '<tr><td><b>' + esc(r.cveId) + '</b></td>' +
+              '<td><pre style="max-height:80px;overflow-y:auto;background:var(--bg);padding:6px;border-radius:4px;font-size:11px;color:var(--green);">' + esc(r.sigmaYaml.slice(0, 150)) + '…</pre></td>' +
+              '<td><pre style="max-height:80px;overflow-y:auto;background:var(--bg);padding:6px;border-radius:4px;font-size:11px;color:var(--yellow);">' + esc(r.yaraRule.slice(0, 150)) + '…</pre></td>' +
+              '<td><button class="btn" onclick="navigator.clipboard.writeText(decodeURIComponent(\'' + encodeURIComponent(r.sigmaYaml) + '\'));alert(\'Copied Sigma rule to clipboard!\');">📋 Copy Sigma</button></td></tr>';
+          }).join('') + '</tbody></table>'
+        ) : '<div class="log-info">No detection rules generated yet</div>';
+      } catch (e) {}
+    }
+
+    async function loadPocRadar() {
+      try {
+        var res = await fetch('/api/pocs');
+        var data = await res.json();
+        var pocs = data.pocs || [];
+        document.getElementById('pocRadarBox').innerHTML = pocs.length ? (
+          '<table><thead><tr><th>CVE ID</th><th>Exploit Source</th><th>Discovered</th><th>Action</th></tr></thead><tbody>' +
+          pocs.map(function(p) {
+            return '<tr><td><b style="color:var(--red);">🔥 ' + esc(p.cveId) + '</b></td>' +
+              '<td>' + esc(p.source) + '</td>' +
+              '<td>' + new Date(p.discoveredAt).toLocaleDateString() + '</td>' +
+              '<td><a href="' + esc(p.pocUrl) + '" target="_blank" class="btn" style="color:var(--blue);">🔍 Inspect PoC Repo</a></td></tr>';
+          }).join('') + '</tbody></table>'
+        ) : '<div class="log-info">No active exploit PoCs indexed yet</div>';
+      } catch (e) {}
+    }
+
+    async function loadPodcast() {
+      try {
+        var res = await fetch('/api/podcast/latest');
+        var data = await res.json();
+        if (data) {
+          document.getElementById('podcastTitle').textContent = data.title || 'Daily Cyber Threat Briefing';
+          document.getElementById('podcastScript').textContent = data.script || '';
+        }
+      } catch (e) {}
+    }
+
+    function playPodcastTTS() {
+      var script = document.getElementById('podcastScript').textContent;
+      if (!script || !window.speechSynthesis) return alert('Speech synthesis not available');
+      window.speechSynthesis.cancel();
+      var utterance = new SpeechSynthesisUtterance(script);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    async function loadWatchlist() {
+      try {
+        var res = await fetch('/api/watchlist');
+        var data = await res.json();
+        var list = data.watchlist || [];
+        document.getElementById('watchlistTagsBox').innerHTML = list.map(function(item) {
+          return '<span style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;display:inline-flex;align-items:center;gap:6px;">' +
+            '🏷️ <b>' + esc(item.keyword) + '</b> <span style="color:var(--muted)">(' + esc(item.category) + ')</span>' +
+            '<button onclick="deleteTech(\'' + esc(item.keyword) + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-weight:bold;margin-left:4px;">×</button></span>';
+        }).join('') || '<div class="log-info">Watchlist empty</div>';
+      } catch (e) {}
+    }
+
+    async function addTech() {
+      var input = document.getElementById('newTechInput');
+      var kw = input.value.trim();
+      if (!kw) return;
+      await fetch('/api/watchlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keyword: kw }) });
+      input.value = '';
+      loadWatchlist();
+    }
+
+    async function deleteTech(kw) {
+      await fetch('/api/watchlist', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keyword: kw }) });
+      loadWatchlist();
+    }
+
+    loadThreatMap();
+    loadDetectionRules();
+    loadPocRadar();
+    loadPodcast();
+    loadWatchlist();
 
     async function triggerRun() {
       const btn    = document.getElementById('runNowBtn');
@@ -743,6 +977,176 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
           res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
           res.end(JSON.stringify(briefing, null, 2));
         }
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    // ── Sigma & YARA Detection Rules API ───────────────────────────────
+    if (url === '/api/detection-rules') {
+      try {
+        const { getAllDetectionRules } = require('./db');
+        const rules = getAllDetectionRules(50);
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ count: rules.length, rules }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    // ── Exploit PoC Radar API ──────────────────────────────────────────
+    if (url === '/api/pocs') {
+      try {
+        const { getAllCvePocs } = require('./db');
+        const pocs = getAllCvePocs(50);
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ count: pocs.length, pocs }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    // ── Technology Watchlist API ───────────────────────────────────────
+    if (url === '/api/watchlist' && req.method === 'GET') {
+      try {
+        const { getMonitoredTechnologies } = require('./watchlist');
+        const list = getMonitoredTechnologies();
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ count: list.length, watchlist: list }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    if (url === '/api/watchlist' && req.method === 'POST') {
+      if (!isTokenValid(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: 'Unauthorized: Admin token required' }));
+        return;
+      }
+      let bodyText = '';
+      req.on('data', (c) => { bodyText += c; });
+      req.on('end', () => {
+        try {
+          const { keyword, category } = JSON.parse(bodyText);
+          const { addTechnology, getMonitoredTechnologies } = require('./watchlist');
+          if (!keyword) {
+            res.writeHead(400, { 'Content-Type': 'application/json', ...secureHeaders() });
+            res.end(JSON.stringify({ error: 'Keyword required' }));
+            return;
+          }
+          addTechnology(keyword, category || 'Custom', 'dashboard');
+          res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ success: true, watchlist: getMonitoredTechnologies() }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
+    if (url === '/api/watchlist' && req.method === 'DELETE') {
+      if (!isTokenValid(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: 'Unauthorized: Admin token required' }));
+        return;
+      }
+      let bodyText = '';
+      req.on('data', (c) => { bodyText += c; });
+      req.on('end', () => {
+        try {
+          const { keyword } = JSON.parse(bodyText);
+          const { removeTechnology, getMonitoredTechnologies } = require('./watchlist');
+          removeTechnology(keyword);
+          res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ success: true, watchlist: getMonitoredTechnologies() }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json', ...secureHeaders() });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // ── Daily Cyber Podcast APIs & RSS Syndication ─────────────────────
+    if (url === '/api/podcast/latest') {
+      try {
+        const { getLatestPodcastEpisode } = require('./db');
+        const { compileDailyPodcast } = require('./podcast-generator');
+        let latest = getLatestPodcastEpisode();
+        if (!latest) {
+          latest = compileDailyPodcast();
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify(latest));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    if (url === '/podcast.xml' || url === '/podcast' || url === '/feed/podcast.xml') {
+      try {
+        const { generatePodcastRssXml } = require('./podcast-generator');
+        const xml = generatePodcastRssXml(`http://${req.headers.host || 'localhost:3000'}`);
+        res.writeHead(200, { 'Content-Type': 'application/rss+xml; charset=utf-8', ...secureHeaders() });
+        res.end(xml);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'text/plain', ...secureHeaders() });
+        res.end('Error generating podcast RSS feed');
+      }
+      return;
+    }
+
+    // ── Global 3D Threat Globe Coordinate Telemetry API ────────────────
+    if (url === '/api/threat-map') {
+      try {
+        const { initDb } = require('./db');
+        const database = initDb();
+        const victims = database.prepare('SELECT victim_name, group_name, country, sector, discovered_at FROM ransomware_victims ORDER BY discovered_at DESC LIMIT 30').all();
+
+        // Standard country lat/long centroid mapping
+        const countryCoords = {
+          'US': { lat: 37.09, lon: -95.71, name: 'United States' },
+          'GB': { lat: 55.37, lon: -3.43, name: 'United Kingdom' },
+          'DE': { lat: 51.16, lon: 10.45, name: 'Germany' },
+          'FR': { lat: 46.22, lon: 2.21, name: 'France' },
+          'IN': { lat: 20.59, lon: 78.96, name: 'India' },
+          'CA': { lat: 56.13, lon: -106.34, name: 'Canada' },
+          'AU': { lat: -25.27, lon: 133.77, name: 'Australia' },
+          'JP': { lat: 36.20, lon: 138.25, name: 'Japan' },
+          'BR': { lat: -14.23, lon: -51.92, name: 'Brazil' },
+          'IT': { lat: 41.87, lon: 12.56, name: 'Italy' },
+          'ES': { lat: 40.46, lon: -3.74, name: 'Spain' },
+          'NL': { lat: 52.13, lon: 5.29, name: 'Netherlands' }
+        };
+
+        const mapNodes = victims.map((v) => {
+          const code = (v.country || 'US').toUpperCase();
+          const coords = countryCoords[code] || countryCoords['US'];
+          return {
+            target: v.victim_name || 'Enterprise Target',
+            threatActor: v.group_name || 'Ransomware Group',
+            sector: v.sector || 'Commercial',
+            country: coords.name,
+            lat: coords.lat + (Math.random() * 2 - 1),
+            lon: coords.lon + (Math.random() * 2 - 1),
+            timestamp: v.discovered_at
+          };
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ count: mapNodes.length, nodes: mapNodes }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
         res.end(JSON.stringify({ error: err.message }));

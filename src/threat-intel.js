@@ -168,24 +168,41 @@ async function enrichArticle(article, fullText = '') {
     return null;
   }
 
-  // Fetch CVE & EPSS scores and CISA KEV status for detected CVEs (max 3)
+  // Fetch CVE & EPSS scores, CISA KEV status, and Exploit PoCs for detected CVEs (max 3)
   const { checkCisaKev } = require('./cisa-kev');
+  const { checkExploitPoC } = require('./poc-tracker');
+  const { matchTechWatchlist } = require('./watchlist');
+  const { getOrGenerateDetectionRules } = require('./sigma-generator');
+
   const cveDetails = await Promise.all(
     cveIds.slice(0, 3).map(async (id) => {
       const basic = await fetchCveAndEpss(id);
       const cisa = await checkCisaKev(id).catch(() => null);
+      const poc = await checkExploitPoC(id).catch(() => ({ hasPoc: false, pocUrl: null }));
       return {
         ...basic,
-        cisaKev: cisa || null
+        cisaKev: cisa || null,
+        poc: poc?.hasPoc ? poc : null
       };
     })
   );
 
-  return {
+  const watchlistMatch = matchTechWatchlist(combinedText);
+
+  const intelResult = {
     cves: cveDetails,
     iocs,
-    mitre
+    mitre,
+    watchlist: watchlistMatch.matched ? watchlistMatch.matches : null
   };
+
+  // Generate Sigma and YARA rules if CVE or actionable threat indicators exist
+  try {
+    const rules = getOrGenerateDetectionRules(article, intelResult);
+    intelResult.detectionRules = rules;
+  } catch {}
+
+  return intelResult;
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
