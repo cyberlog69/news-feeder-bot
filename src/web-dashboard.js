@@ -372,16 +372,33 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
     loadTrends();
 
     // ── 3D Threat Globe Canvas & Radar Animation ────────────────────
-    function initThreatGlobe(nodes) {
+    var threatGlobeAnimId = null;
+    var defaultThreatNodes = [
+      { target: 'Financial Core Banking Perimeter', threatActor: 'LockBit 3.0', country: 'United States', sector: 'Finance', lat: 40.71, lon: -74.00 },
+      { target: 'Cloud Gateway & VPN Perimeter', threatActor: 'RansomHub', country: 'United Kingdom', sector: 'Telecom', lat: 51.50, lon: -0.12 },
+      { target: 'Healthcare Patient Records Portal', threatActor: 'BlackCat/ALPHV', country: 'Germany', sector: 'Healthcare', lat: 52.52, lon: 13.40 },
+      { target: 'Supply Chain & Logistics Network', threatActor: 'Volt Typhoon', country: 'Australia', sector: 'Logistics', lat: -33.86, lon: 151.20 },
+      { target: 'Energy Dispatch Grid Substation', threatActor: 'Akira', country: 'Japan', sector: 'Energy', lat: 35.67, lon: 139.65 },
+      { target: 'Defense Contractor Extranet', threatActor: 'Play Ransomware', country: 'France', sector: 'Defense', lat: 48.85, lon: 2.35 }
+    ];
+    var activeThreatNodes = defaultThreatNodes.slice();
+
+    function initThreatGlobe() {
       var canvas = document.getElementById('threatGlobeCanvas');
       if (!canvas) return;
       var ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      if (threatGlobeAnimId) {
+        cancelAnimationFrame(threatGlobeAnimId);
+      }
+
       var rotY = 0;
-      var rotX = 0.2;
+      var rotX = 0.25;
       var isDragging = false;
       var lastMouseX = 0, lastMouseY = 0;
 
-      // Mouse drag rotation
+      // Mouse and touch drag rotation
       canvas.onmousedown = function(e) {
         isDragging = true;
         lastMouseX = e.clientX;
@@ -398,22 +415,12 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         lastMouseY = e.clientY;
       };
 
-      // Fallback sample threats if no live nodes yet
-      var activeNodes = (nodes && nodes.length) ? nodes : [
-        { target: 'Financial Exchange Host', threatActor: 'LockBit 3.0', country: 'United States', sector: 'Finance', lat: 40.71, lon: -74.00 },
-        { target: 'Cloud Gateway Perimeter', threatActor: 'RansomHub', country: 'United Kingdom', sector: 'Telecom', lat: 51.50, lon: -0.12 },
-        { target: 'Healthcare Patient Portal', threatActor: 'BlackCat', country: 'Germany', sector: 'Healthcare', lat: 52.52, lon: 13.40 },
-        { target: 'Supply Chain Hub Node', threatActor: 'Volt Typhoon', country: 'Australia', sector: 'Logistics', lat: -33.86, lon: 151.20 },
-        { target: 'Energy Dispatch Grid', threatActor: 'Akira', country: 'Japan', sector: 'Energy', lat: 35.67, lon: 139.65 },
-        { target: 'Defense Contractor Extranet', threatActor: 'Play Ransomware', country: 'France', sector: 'Defense', lat: 48.85, lon: 2.35 }
-      ];
-
-      // Generate 120 spherical Fibonacci surface dots
+      // Generate spherical Fibonacci surface dots
       var surfaceDots = [];
       var numDots = 140;
       for (var i = 0; i < numDots; i++) {
         var y = 1 - (i / (numDots - 1)) * 2;
-        var rAtY = Math.sqrt(1 - y * y);
+        var rAtY = Math.sqrt(Math.max(0, 1 - y * y));
         var phi = i * 2.3999632; // golden angle
         surfaceDots.push({
           x: Math.cos(phi) * rAtY,
@@ -449,11 +456,11 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         var cy = canvas.height / 2;
         var radius = 125;
 
-        // Draw Globe Backing Atmosphere Glow
+        // Globe Atmosphere Glow
         var grad = ctx.createRadialGradient(cx, cy, radius * 0.2, cx, cy, radius);
-        grad.addColorStop(0, 'rgba(30, 27, 75, 0.4)');
-        grad.addColorStop(0.85, 'rgba(15, 23, 42, 0.8)');
-        grad.addColorStop(1, 'rgba(99, 102, 241, 0.25)');
+        grad.addColorStop(0, 'rgba(30, 27, 75, 0.45)');
+        grad.addColorStop(0.85, 'rgba(15, 23, 42, 0.85)');
+        grad.addColorStop(1, 'rgba(99, 102, 241, 0.3)');
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -466,7 +473,7 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Draw Latitude Rings (using pure 3D projected lines)
+        // Draw Latitude Rings
         var latAngles = [-0.8, -0.4, 0, 0.4, 0.8];
         latAngles.forEach(function(lat) {
           var yVal = Math.sin(lat);
@@ -524,7 +531,7 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         });
 
         // Draw Threat Nodes & Attack Pulse
-        activeNodes.forEach(function(node, idx) {
+        activeThreatNodes.forEach(function(node, idx) {
           var latRad = (node.lat || 0) * (Math.PI / 180);
           var lonRad = (node.lon || 0) * (Math.PI / 180);
           var nx = Math.cos(latRad) * Math.sin(lonRad);
@@ -571,31 +578,44 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
           rotY += 0.005;
         }
         pulseTimer += 0.02;
-        requestAnimationFrame(draw);
+        threatGlobeAnimId = requestAnimationFrame(draw);
       }
       draw();
     }
 
+    function renderThreatList(nodes) {
+      var box = document.getElementById('threatNodesBox');
+      if (!box) return;
+      var listHtml = (nodes && nodes.length) ? nodes.map(function(n) {
+        return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">' +
+          '<span style="color:var(--red);font-weight:700;">🏴‍☠️ ' + esc(n.threatActor) + '</span> ' +
+          '<span style="color:var(--muted);margin:0 6px;">➔</span> ' +
+          '<span style="color:var(--text);font-weight:600;">' + esc(n.target) + '</span>' +
+          '<div style="color:var(--muted);font-size:11px;margin-top:2px;">📍 ' + esc(n.country) + ' • Sector: ' + esc(n.sector) + '</div></div>';
+      }).join('') : '<div class="log-info">Active global threat telemetry streaming…</div>';
+      box.innerHTML = listHtml;
+    }
+
     async function loadThreatMap() {
+      // Show default threats immediately
+      renderThreatList(activeThreatNodes);
       try {
         var res = await fetch('/api/threat-map');
-        var data = await res.json();
-        var nodes = data.nodes || [];
-        initThreatGlobe(nodes);
-
-        var listHtml = nodes.length ? nodes.map(function(n) {
-          return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">' +
-            '<span style="color:var(--red);font-weight:700;">🏴‍☠️ ' + esc(n.threatActor) + '</span> ' +
-            '<span style="color:var(--muted);margin:0 6px;">➔</span> ' +
-            '<span style="color:var(--text);font-weight:600;">' + esc(n.target) + '</span>' +
-            '<div style="color:var(--muted);font-size:11px;margin-top:2px;">📍 ' + esc(n.country) + ' • Sector: ' + esc(n.sector) + '</div></div>';
-        }).join('') : '<div class="log-info">Active global threat telemetry streaming…</div>';
-
-        document.getElementById('threatNodesBox').innerHTML = listHtml;
+        if (res.ok) {
+          var data = await res.json();
+          if (data && data.nodes && data.nodes.length > 0) {
+            activeThreatNodes = data.nodes;
+            renderThreatList(activeThreatNodes);
+          }
+        }
       } catch (e) {
-        initThreatGlobe([]);
+        // Keeps default activeThreatNodes rendered
       }
     }
+
+    // Launch Threat Globe immediately
+    initThreatGlobe();
+    loadThreatMap();
 
     async function loadDetectionRules() {
       try {
