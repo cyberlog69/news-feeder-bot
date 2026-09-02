@@ -73,7 +73,7 @@
     {
       "name": "Ars Technica Security",
       "url": "https://arstechnica.com/security/",
-      "rss": "https://feeds.arstechnica.com/arstechnica/security",
+      "rss": "https://arstechnica.com/security/feed/",
       "category": "⚡ Tech Security",
       "enabled": true
     },
