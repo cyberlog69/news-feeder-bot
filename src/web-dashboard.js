@@ -714,7 +714,7 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         document.getElementById('watchlistTagsBox').innerHTML = list.map(function(item) {
           return '<span style="background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:12px;display:inline-flex;align-items:center;gap:6px;">' +
             '🏷️ <b>' + esc(item.keyword) + '</b> <span style="color:var(--muted)">(' + esc(item.category) + ')</span>' +
-            '<button onclick="deleteTech(\'' + esc(item.keyword) + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-weight:bold;margin-left:4px;">×</button></span>';
+            '<button data-tech="' + esc(item.keyword) + '" onclick="deleteTech(this.dataset.tech)" style="background:none;border:none;color:var(--red);cursor:pointer;font-weight:bold;margin-left:4px;">×</button></span>';
         }).join('') || '<div class="log-info">Watchlist empty</div>';
       } catch (e) {}
     }
