@@ -5,84 +5,96 @@
       "url": "https://cybersecuritynews.com/",
       "rss": "https://cybersecuritynews.com/feed/",
       "category": "🔐 Cybersecurity",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.85
     },
     {
       "name": "The Hacker News",
       "url": "https://thehackernews.com/",
       "rss": "https://feeds.feedburner.com/TheHackersNews",
       "category": "💻 The Hacker News",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.90
     },
     {
       "name": "BleepingComputer",
       "url": "https://www.bleepingcomputer.com/",
       "rss": "https://www.bleepingcomputer.com/feed/",
       "category": "🖥️ BleepingComputer",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.92
     },
     {
       "name": "SecurityWeek",
       "url": "https://www.securityweek.com/",
       "rss": "https://www.securityweek.com/feed/",
       "category": "🛡️ Vulnerabilities & 0-Days",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.90
     },
     {
       "name": "CISA Advisories",
       "url": "https://www.cisa.gov/",
       "rss": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
       "category": "🏛️ CISA Advisories",
-      "enabled": true
+      "enabled": true,
+      "reputation": 1.00
     },
     {
       "name": "Krebs on Security",
       "url": "https://krebsonsecurity.com/",
       "rss": "https://krebsonsecurity.com/feed/",
       "category": "🕵️ Investigative Cybercrime",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.95
     },
     {
       "name": "Dark Reading",
       "url": "https://www.darkreading.com/",
       "rss": "https://www.darkreading.com/rss.xml",
       "category": "🔒 Enterprise Security",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.88
     },
     {
       "name": "Unit 42 Threat Research",
       "url": "https://unit42.paloaltonetworks.com/",
       "rss": "https://unit42.paloaltonetworks.com/feed/",
       "category": "🎯 Threat Intel & APTs",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.95
     },
     {
       "name": "Microsoft Security Blog",
       "url": "https://www.microsoft.com/en-us/security/blog/",
       "rss": "https://www.microsoft.com/en-us/security/blog/feed/",
       "category": "☁️ Cloud & OS Security",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.95
     },
     {
       "name": "Cisco Talos Intelligence",
       "url": "https://blog.talosintelligence.com/",
       "rss": "https://blog.talosintelligence.com/rss/",
       "category": "🔬 Vulnerability Research",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.95
     },
     {
       "name": "Ars Technica Security",
       "url": "https://arstechnica.com/security/",
       "rss": "https://arstechnica.com/security/feed/",
       "category": "⚡ Tech Security",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.80
     },
     {
       "name": "Hacker News",
       "url": "https://news.ycombinator.com/",
       "rss": "https://news.ycombinator.com/rss",
       "category": "🚀 Tech & Dev",
-      "enabled": true
+      "enabled": true,
+      "reputation": 0.70
     }
   ],
   "settings": {

@@ -1,9 +1,9 @@
 <div align="center">
 
-# 📰 News Feeder Bot v3.16.0
+# 📰 News Feeder Bot v3.17.0
 
 ### Autonomous Cybersecurity & Tech Intelligence Platform — Delivered Across 9 Platforms
-#### Threat Intel (CVE/EPSS/IOC/MITRE) · Sigma & YARA Detection Rules · Exploit PoC Radar · Daily Cyber Podcast · 3D Threat Globe · RAG AI (`/ask`) · 0 Audit Vulnerabilities
+#### Threat Intel (CVE/EPSS/IOC/MITRE) · Sigma/YARA & Sentinel KQL · STIX/TAXII 2.1 · Neural Cyber Podcast · 3D Threat Globe · 0 Audit Vulnerabilities
 
 [![CI](https://github.com/cyberlog69/news-feeder-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/cyberlog69/news-feeder-bot/actions)
 [![Security](https://img.shields.io/badge/npm%20audit-0%20vulnerabilities-brightgreen)](https://npmjs.com)
@@ -17,13 +17,16 @@
 
 ## 📌 Table of Contents
 
-- [What's New in v3.16.0](#-whats-new-in-v3160)
+- [What's New in v3.17.0](#-whats-new-in-v3170)
 - [Features](#-features)
 - [Supported Delivery Channels](#-supported-delivery-channels)
 - [Quick Start](#-quick-start)
+- [SIEM & SOAR Rule Transpiler & Push API](#-siem--soar-rule-transpiler)
+- [STIX 2.1 & TAXII 2.1 Threat Sharing](#-stix-21--taxii-21-threat-sharing)
+- [Daily Cyber Threat Podcast & Audio Stream](#-daily-cyber-threat-podcast--rss-feed)
+- [Granular Source Reputation & Adaptive Scorer](#-granular-source-reputation)
 - [AI Sigma & YARA Detection Rule Generator](#-ai-sigma--yara-rule-generator)
 - [Real-Time Exploit PoC Radar](#-real-time-exploit-poc-radar)
-- [Daily Cyber Threat Podcast & RSS Feed](#-daily-cyber-threat-podcast--rss-feed)
 - [Organization Tech Stack Watchlist](#-organization-tech-stack-watchlist)
 - [Interactive Threat Intel Commands](#-interactive-threat-intel-commands)
 - [3D Interactive Cyber Threat Globe & Radar](#-3d-interactive-cyber-threat-globe--radar)
@@ -37,17 +40,15 @@
 
 ---
 
-## 🆕 What's New in v3.16.0
+## 🆕 What's New in v3.17.0
 
 | Module | Details |
 |---|---|
-| 🛡️ **AI Sigma & YARA Rule Generator** | Automatically synthesizes standards-compliant **Sigma Detection Rules (YAML)** (for Splunk, Elastic, Microsoft Sentinel, CrowdStrike) and **YARA Rules** for disclosed CVEs, malware campaigns, and extracted IOCs. Viewable via `/rules <CVE>` and the dashboard hub (`/api/detection-rules`). |
-| 🔥 **Real-Time Exploit PoC Radar** | Real-time weaponization tracker scanning open-source exploit registries (GitHub Public Advisories/PoCs, Exploit-DB, PacketStorm) for matching CVEs with SQLite caching (`/api/pocs`) and alert badges. |
-| 🎯 **Organization Tech Stack Watchlist** | Configure monitored vendor/product tech stacks (e.g. `cisco`, `fortinet`, `nginx`, `vmware`, `aws`, `windows`). Ingested advisories matching your perimeter receive elevated priority alerts (`/watchlist`). |
-| 💬 **Interactive Investigation Commands** | Added 2-way investigative commands across all chat channels: `/lookup <CVE-ID>` (CVSS, EPSS %, CISA KEV, PoC), `/ip <IPv4>` (categorization & defanging), `/hash <MD5|SHA1|SHA256>` (malware lookup), `/watchlist`, and `/rules`. |
-| 🎙️ **Daily Cyber Podcast & RSS Feed** | Synthesizes a structured 2-minute daily executive cyber podcast briefing with intro cues, headline roundups, and tactical takeaways. Exposed via standard Apple Podcasts / Spotify RSS XML feed (`/podcast.xml`) and Web Player. |
-| 🗺️ **3D Interactive Cyber Threat Globe** | Built-in canvas-based 3D rotating Threat Globe on the SOC Dashboard (`http://localhost:3000`) visualizing ransomware victims, threat origins, and real-time attack arcs. |
-| 🧪 **81/81 Passing Unit Tests** | Comprehensive automated test suite (`npm test`) covering Sigma/YARA generation, PoC tracking, Watchlist matching, Podcast generation, and interactive bot commands with 100% pass rate. |
+| 🛡️ **SIEM/SOAR Rule Transpiler & Push API** | Automatically transpiles Sigma rules into **Microsoft Sentinel KQL**, **Splunk SPL**, and **Elastic Detection Queries**. Includes rule syntax validation and automated push APIs (`/api/siem/rules`, `/api/siem/push`). |
+| 📡 **STIX 2.1 & TAXII 2.1 Threat Sharing** | Full **TAXII 2.1 Server** (`/taxii2/`, `/taxii2/root/`, `/taxii2/root/collections/`) serving STIX 2.1 indicator bundles, and structured **MISP Event** exports (`/api/misp/events`, `/api/stix/bundle`). |
+| 🎙️ **Neural Podcast Audio Synthesis** | Automatically compiles streamable daily cyber briefing `.mp3` audio files served via `/api/podcast/audio` and dynamically injects accurate enclosure metadata into the Apple/Spotify `/podcast.xml` RSS feed. |
+| ⚖️ **Granular Source Reputation & Breaker Bonus** | Per-source credibility weighting in `config.json` with dynamic **Breaker Bonus** (+0.10) for in-the-wild zero-days and emergency patches (`/api/sources/reputation`). |
+| 🧪 **94/94 Passing Unit Tests** | Automated test coverage expanded to 94 tests (`npm test`) covering SIEM push, STIX/TAXII, audio synthesis, and reputation scoring with a 100% pass rate. |
 
 ---
 
@@ -348,7 +349,8 @@ Run the Node.js native test suite:
 npm test
 ```
 
-### Test Suite Breakdown (55/55 Passed)
+### Test Suite Breakdown (94/94 Passed)
+- `test/phase1-enterprise.test.js` — SIEM KQL/SPL push, STIX/TAXII 2.1 threat sharing, neural podcast audio synthesis, and source reputation
 - `test/enterprise-security.test.js` — RBAC token validation, sliding-window rate limiting, CEF/ECS audit logging & DB maintenance
 - `test/social-broadcast.test.js` — Mastodon/Bluesky broadcasters and public RSS/Atom/JSON feed generators
 - `test/ciso-briefing.test.js` — Executive CISO threat briefing generator (Markdown & print/PDF HTML)
