@@ -205,6 +205,7 @@ function generatePodcastRssXml(baseUrl = 'http://localhost:3000') {
   }).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="${cleanBase}/podcast.xsl"?>
 <rss version="2.0" 
      xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" 
      xmlns:content="http://purl.org/rss/1.0/modules/content/">
@@ -223,6 +224,244 @@ function generatePodcastRssXml(baseUrl = 'http://localhost:3000') {
 ${itemsXml}
   </channel>
 </rss>`;
+}
+
+/**
+ * Return XSL stylesheet for human-readable podcast RSS browsing in web browsers.
+ * Transforms /podcast.xml into a modern, styled podcast web page with audio player.
+ * @returns {string}
+ */
+function getPodcastXsl() {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <xsl:output method="html" version="1.0" encoding="UTF-8" indent="yes"/>
+  <xsl:template match="/">
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title><xsl:value-of select="/rss/channel/title"/> — Podcast Feed</title>
+        <style>
+          :root {
+            --bg: #0f0f13;
+            --surface: #1a1a24;
+            --border: #2d2d40;
+            --text: #e0e0e0;
+            --muted: #9ca3af;
+            --accent: #818cf8;
+            --green: #4ade80;
+            --blue: #60a5fa;
+          }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            padding: 24px 16px;
+          }
+          .container {
+            max-width: 800px;
+            margin: 0 auto;
+          }
+          .banner {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+          }
+          .badge {
+            background: rgba(129, 140, 248, 0.15);
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-bottom: 12px;
+          }
+          h1 {
+            font-size: 24px;
+            color: #fff;
+            margin-bottom: 8px;
+          }
+          p.lead {
+            color: var(--muted);
+            font-size: 14px;
+            margin-bottom: 16px;
+          }
+          .feed-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+          }
+          .feed-box label {
+            display: block;
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            font-weight: 700;
+            margin-bottom: 6px;
+          }
+          .feed-input-row {
+            display: flex;
+            gap: 8px;
+          }
+          .feed-input {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--accent);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+          }
+          .btn {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+          }
+          .btn:hover { background: #6d6dda; }
+          .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+          }
+          .btn-outline:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+          }
+          .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 14px;
+          }
+          .episode-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+          }
+          .episode-title {
+            font-size: 18px;
+            color: #fff;
+            margin-bottom: 6px;
+          }
+          .episode-meta {
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 14px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+          }
+          .episode-desc {
+            font-size: 13px;
+            color: var(--text);
+            line-height: 1.6;
+            margin-bottom: 16px;
+            white-space: pre-wrap;
+            background: var(--bg);
+            padding: 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+          }
+          audio {
+            width: 100%;
+            height: 40px;
+            border-radius: 6px;
+          }
+          .info-note {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 24px;
+            text-align: center;
+          }
+          .info-note a {
+            color: var(--blue);
+            text-decoration: none;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="banner">
+            <span class="badge">🎙️ Podcast RSS Feed</span>
+            <h1><xsl:value-of select="/rss/channel/title"/></h1>
+            <p class="lead"><xsl:value-of select="/rss/channel/description"/></p>
+
+            <div class="feed-box">
+              <label>Podcast RSS Feed URL (Copy into Apple Podcasts, Pocket Casts, or your favorite player):</label>
+              <div class="feed-input-row">
+                <input type="text" class="feed-input" id="rssUrl" readonly="readonly">
+                  <xsl:attribute name="value">
+                    <xsl:value-of select="/rss/channel/link"/>/podcast.xml
+                  </xsl:attribute>
+                </input>
+                <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('rssUrl').value);this.textContent='Copied!';">📋 Copy URL</button>
+              </div>
+            </div>
+
+            <div class="actions">
+              <a class="btn btn-outline">
+                <xsl:attribute name="href">
+                  podcast://<xsl:value-of select="substring-after(/rss/channel/link, '://')"/>/podcast.xml
+                </xsl:attribute>
+                🍏 Open in Apple Podcasts
+              </a>
+              <a class="btn btn-outline" href="/">
+                🏠 Back to SOC Dashboard
+              </a>
+            </div>
+          </div>
+
+          <h2 style="font-size:16px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px;">Recent Episodes</h2>
+
+          <xsl:for-each select="/rss/channel/item">
+            <div class="episode-card">
+              <h3 class="episode-title"><xsl:value-of select="title"/></h3>
+              <div class="episode-meta">
+                <span>📅 <xsl:value-of select="pubDate"/></span>
+                <span>⏱️ <xsl:value-of select="itunes:duration"/></span>
+              </div>
+              <div class="episode-desc"><xsl:value-of select="description"/></div>
+              <audio controls="controls" preload="metadata">
+                <source type="audio/mpeg">
+                  <xsl:attribute name="src">
+                    <xsl:value-of select="enclosure/@url"/>
+                  </xsl:attribute>
+                </source>
+                Your browser does not support the audio element.
+              </audio>
+            </div>
+          </xsl:for-each>
+
+          <p class="info-note">
+            Autonomous Cyber Threat Briefing Podcast Feed · Powered by News Feeder Bot SOC Intelligence · <a href="/">Return to Dashboard</a>
+          </p>
+        </div>
+      </body>
+    </html>
+  </xsl:template>
+</xsl:stylesheet>`;
 }
 
 /**
@@ -255,6 +494,7 @@ function compileDailyPodcast(articles = null) {
 module.exports = {
   generatePodcastScript,
   generatePodcastRssXml,
+  getPodcastXsl,
   compileDailyPodcast,
   synthesizePodcastAudio,
   getPodcastAudioPath,

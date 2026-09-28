@@ -160,6 +160,29 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
     .bar-track{flex:1;background:var(--border);border-radius:4px;height:16px;overflow:hidden}
     .bar-fill{height:100%;background:var(--accent);border-radius:4px}
     .bar-count{min-width:36px;font-size:12px;color:var(--text);font-weight:600}
+    /* Podcast Subscribe Modal */
+    .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:16px}
+    .modal-overlay.active{display:flex}
+    .modal-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;max-width:560px;width:100%;box-shadow:0 20px 40px rgba(0,0,0,0.6);overflow:hidden;animation:modalFadeIn .2s ease-out}
+    @keyframes modalFadeIn{from{opacity:0;transform:scale(.96) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+    .modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+    .modal-header h3{font-size:15px;color:var(--accent);display:flex;align-items:center;gap:8px}
+    .modal-close{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:2px 8px;border-radius:4px}
+    .modal-close:hover{color:var(--text);background:var(--border)}
+    .modal-body{padding:18px 20px}
+    .feed-url-group{display:flex;gap:8px;margin:10px 0 16px}
+    .feed-url-input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:6px;font-family:'Cascadia Code','Consolas',monospace;font-size:12px}
+    .btn-copy{background:var(--accent);color:#fff;border:none;padding:9px 14px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px;white-space:nowrap;transition:background .15s}
+    .btn-copy:hover{background:#6d6dda}
+    .btn-copy.copied{background:var(--green);color:#000}
+    .app-buttons{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:16px}
+    .app-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);text-decoration:none;font-size:12px;font-weight:600;transition:border-color .15s,background .15s}
+    .app-btn:hover{border-color:var(--accent);background:rgba(129,140,248,0.08);color:var(--blue)}
+    .guide-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:12px;line-height:1.6}
+    .guide-box h4{color:var(--text);font-size:11px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em}
+    .guide-box ol{margin-left:18px;color:var(--muted)}
+    .guide-box li{margin-bottom:3px}
+    .guide-box b{color:var(--text)}
   </style>
 </head>
 <body>
@@ -254,9 +277,13 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
       <div style="flex:1;min-width:280px;">
         <h3 id="podcastTitle" style="color:var(--accent);font-size:15px;margin-bottom:8px;">Daily Cyber Threat Briefing</h3>
         <p id="podcastScript" style="color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:12px;max-height:100px;overflow-y:auto;">Loading briefing script…</p>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <a href="/podcast.xml" target="_blank" class="btn" style="background:#818cf8;color:#fff;border-color:#818cf8;">📡 Subscribe RSS (Apple/Spotify)</a>
-          <button class="btn" onclick="playPodcastTTS()">🔊 Read Briefing Audio</button>
+        <div style="margin-bottom:12px;">
+          <audio id="podcastAudio" controls preload="metadata" style="width:100%;height:36px;border-radius:6px;background:var(--bg);" src="/api/podcast/audio"></audio>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button type="button" class="btn" onclick="openSubscribeModal()" style="background:#818cf8;color:#fff;border-color:#818cf8;font-weight:600;display:inline-flex;align-items:center;gap:6px;">📡 Subscribe RSS (Apple/Spotify)</button>
+          <button type="button" class="btn" onclick="playPodcastTTS()" style="display:inline-flex;align-items:center;gap:6px;">🗣️ Read with Browser TTS</button>
+          <a href="/api/podcast/audio" download="cyber-threat-briefing.mp3" class="btn" style="color:var(--muted);display:inline-flex;align-items:center;gap:6px;">⬇️ Download MP3</a>
         </div>
       </div>
     </div>
@@ -692,8 +719,74 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         if (data) {
           document.getElementById('podcastTitle').textContent = data.title || 'Daily Cyber Threat Briefing';
           document.getElementById('podcastScript').textContent = data.script || '';
+          var audio = document.getElementById('podcastAudio');
+          if (audio && data.audioUrl) {
+            audio.src = data.audioUrl;
+          }
         }
       } catch (e) {}
+    }
+
+    function openSubscribeModal() {
+      var modal = document.getElementById('subscribeModal');
+      var input = document.getElementById('feedUrlInput');
+      var fullUrl = window.location.origin + '/podcast.xml';
+      if (input) input.value = fullUrl;
+
+      var apple = document.getElementById('applePodcastsLink');
+      if (apple) {
+        apple.href = 'podcast://' + window.location.host + '/podcast.xml';
+      }
+
+      var pocket = document.getElementById('pocketCastsLink');
+      if (pocket) {
+        pocket.href = 'https://pca.st/subscribe?url=' + encodeURIComponent(fullUrl);
+      }
+
+      var overcast = document.getElementById('overcastLink');
+      if (overcast) {
+        overcast.href = 'overcast://x-callback-url/add?url=' + encodeURIComponent(fullUrl);
+      }
+
+      if (modal) modal.classList.add('active');
+    }
+
+    function closeSubscribeModal() {
+      var modal = document.getElementById('subscribeModal');
+      if (modal) modal.classList.remove('active');
+    }
+
+    window.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeSubscribeModal();
+    });
+
+    async function copyPodcastFeedUrl() {
+      var input = document.getElementById('feedUrlInput');
+      var btn = document.getElementById('copyFeedBtn');
+      if (!input) return;
+      var url = input.value || (window.location.origin + '/podcast.xml');
+      try {
+        await navigator.clipboard.writeText(url);
+        if (btn) {
+          btn.textContent = '✅ Copied!';
+          btn.classList.add('copied');
+          setTimeout(function() {
+            btn.textContent = '📋 Copy URL';
+            btn.classList.remove('copied');
+          }, 2500);
+        }
+      } catch (e) {
+        input.select();
+        document.execCommand('copy');
+        if (btn) {
+          btn.textContent = '✅ Copied!';
+          btn.classList.add('copied');
+          setTimeout(function() {
+            btn.textContent = '📋 Copy URL';
+            btn.classList.remove('copied');
+          }, 2500);
+        }
+      }
     }
 
     function playPodcastTTS() {
@@ -781,6 +874,46 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
       }
     }
   </script>
+
+  <!-- Podcast Subscribe Modal -->
+  <div id="subscribeModal" class="modal-overlay" onclick="if(event.target===this)closeSubscribeModal()">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🎙️ Subscribe to Cyber Threat Briefing</h3>
+        <button class="modal-close" onclick="closeSubscribeModal()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px;line-height:1.5;">
+          Subscribe to autonomous daily 2-minute cyber threat intelligence briefings in Apple Podcasts, Pocket Casts, or your favorite podcast app via standard RSS.
+        </p>
+
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.05em;">Podcast RSS Feed URL</label>
+        <div class="feed-url-group">
+          <input type="text" id="feedUrlInput" class="feed-url-input" readonly value="">
+          <button id="copyFeedBtn" class="btn-copy" onclick="copyPodcastFeedUrl()">📋 Copy URL</button>
+        </div>
+
+        <div class="app-buttons">
+          <a id="applePodcastsLink" href="#" class="app-btn">🍏 Apple Podcasts</a>
+          <a id="pocketCastsLink" href="#" target="_blank" rel="noopener" class="app-btn">📱 Pocket Casts</a>
+          <a id="overcastLink" href="#" target="_blank" rel="noopener" class="app-btn">🎧 Overcast</a>
+          <a href="/podcast.xml" target="_blank" class="app-btn" style="color:var(--muted);">📄 Raw XML Feed</a>
+        </div>
+
+        <div class="guide-box">
+          <h4>How to Add to Your App</h4>
+          <ol>
+            <li>Click <b>📋 Copy URL</b> above.</li>
+            <li>In <b>Apple Podcasts</b>: Go to <b>Library</b> ➔ tap <b>⋯</b> ➔ choose <b>Follow a Show by URL…</b> ➔ paste and tap Follow.</li>
+            <li>In <b>Pocket Casts / Overcast / AntennaPod</b>: Paste the URL directly into the search bar.</li>
+          </ol>
+          <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);color:var(--muted);font-size:11px;line-height:1.4;">
+            💡 <b>Spotify notice:</b> Spotify is a closed directory where show creators register feeds once via <a href="https://podcasters.spotify.com" target="_blank" rel="noopener" style="color:var(--blue)">podcasters.spotify.com</a>. You can listen directly in the web audio player above or subscribe in Apple Podcasts / Pocket Casts.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>`;
 }
@@ -1341,6 +1474,18 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'text/plain', ...secureHeaders() });
         res.end('Error generating podcast RSS feed');
+      }
+      return;
+    }
+
+    if (url === '/podcast.xsl') {
+      try {
+        const { getPodcastXsl } = require('./podcast-generator');
+        res.writeHead(200, { 'Content-Type': 'text/xsl; charset=utf-8', ...secureHeaders() });
+        res.end(getPodcastXsl());
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'text/plain', ...secureHeaders() });
+        res.end('Error generating podcast XSL stylesheet');
       }
       return;
     }

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { generatePodcastScript, generatePodcastRssXml, compileDailyPodcast } = require('../src/podcast-generator');
+const { generatePodcastScript, generatePodcastRssXml, getPodcastXsl, compileDailyPodcast } = require('../src/podcast-generator');
 const { startDashboard } = require('../src/web-dashboard');
 
 test('Podcast Generator - generates broadcast daily cyber news podcast script', () => {
@@ -17,7 +17,7 @@ test('Podcast Generator - generates broadcast daily cyber news podcast script', 
   assert.ok(podcast.script.includes('Tactical takeaway for security teams'));
 });
 
-test('Podcast Generator - creates valid Apple/Spotify RSS 2.0 podcast XML feed', () => {
+test('Podcast Generator - creates valid Apple/Spotify RSS 2.0 podcast XML feed with XSL stylesheet', () => {
   compileDailyPodcast([
     { title: 'Ransomware Gang Leaks Stolen Corporate Data', url: 'https://example.com/leak' }
   ]);
@@ -28,9 +28,14 @@ test('Podcast Generator - creates valid Apple/Spotify RSS 2.0 podcast XML feed',
   assert.ok(xml.includes('<title>Daily Cyber Threat Briefing</title>'));
   assert.ok(xml.includes('xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"'));
   assert.ok(xml.includes('<enclosure url="http://localhost:3000/api/podcast/audio"'));
+  assert.ok(xml.includes('xml-stylesheet type="text/xsl" href="http://localhost:3000/podcast.xsl"'));
+
+  const xsl = getPodcastXsl();
+  assert.ok(xsl.includes('<xsl:stylesheet'));
+  assert.ok(xsl.includes('Podcast RSS Feed'));
 });
 
-test('Dashboard APIs - /api/detection-rules, /api/pocs, /api/watchlist, /api/threat-map, /podcast.xml respond with 200', async () => {
+test('Dashboard APIs - /api/detection-rules, /api/pocs, /api/watchlist, /api/threat-map, /podcast.xml, /podcast.xsl respond with 200', async () => {
   const mockPipeline = {
     getStats: () => ({ totalSent: 10 }),
     getRecentArticles: () => []
@@ -66,7 +71,21 @@ test('Dashboard APIs - /api/detection-rules, /api/pocs, /api/watchlist, /api/thr
     assert.equal(rPodcastXml.status, 200);
     const xml = await rPodcastXml.text();
     assert.ok(xml.includes('<title>Daily Cyber Threat Briefing</title>'));
+
+    const rPodcastXsl = await fetch(`${baseUrl}/podcast.xsl`);
+    assert.equal(rPodcastXsl.status, 200);
+    assert.ok(rPodcastXsl.headers.get('content-type').includes('text/xsl'));
+    const xsl = await rPodcastXsl.text();
+    assert.ok(xsl.includes('<xsl:stylesheet'));
+
+    const rDashboard = await fetch(`${baseUrl}/`);
+    assert.equal(rDashboard.status, 200);
+    const html = await rDashboard.text();
+    assert.ok(html.includes('openSubscribeModal()'));
+    assert.ok(html.includes('id="subscribeModal"'));
+    assert.ok(html.includes('id="podcastAudio"'));
   } finally {
     server.close();
   }
 });
+
