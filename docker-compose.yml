@@ -1,10 +1,17 @@
-# docker-compose.yml — News Feeder Bot v3.0
+# docker-compose.yml — News Feeder Bot v3.14.0
 #
-# Usage:
-#   docker-compose up -d          # start in background
-#   docker-compose logs -f        # follow logs
-#   docker-compose down           # stop
-#   docker-compose pull && docker-compose up -d   # update
+# Usage (Docker):
+#   docker compose up -d          # start in background
+#   docker compose logs -f        # follow logs
+#   docker compose down           # stop
+#   docker compose pull && docker compose up -d   # update
+#
+# Usage (Podman):
+#   podman-compose up -d          # start in background
+#   podman-compose logs -f        # follow logs
+#   podman-compose down           # stop
+#   podman-compose build && podman-compose up -d  # update
+
 
 services:
   news-feeder-bot:
@@ -39,8 +46,8 @@ services:
       - whatsapp_cache:/app/.wwebjs_cache
       # Article history, summary cache, and log files
       - bot_data:/app/data
-      # config.json — mounted writable so the dashboard can toggle/add/delete sources at runtime
-      - ./config.json:/app/config.json
+      # config.json — mounted writable (:Z allows rootless Podman / SELinux to write to host file)
+      - ./config.json:/app/config.json:Z
 
     # Security: limit attack surface
     security_opt:

@@ -6,8 +6,8 @@
 #    Stage 2 (final) — lean production runtime with pre-configured Debian Chromium
 #
 #  Usage:
-#    docker build -t news-feeder-bot .
-#    docker compose up -d
+#    Docker: docker build -t news-feeder-bot . && docker compose up -d
+#    Podman: podman build -t news-feeder-bot . && podman-compose up -d
 # ─────────────────────────────────────────────────────────
 
 # ── Stage 1: Install dependencies ────────────────────────

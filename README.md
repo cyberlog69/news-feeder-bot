@@ -310,10 +310,15 @@ The Web Dashboard listens on `http://localhost:3000`:
 
 ### Quick Deployment Options:
 
-* **Docker & Docker Compose (Recommended)**:
+* **Docker & Podman (Recommended)**:
   ```bash
-  docker-compose up -d --build
-  docker-compose logs -f
+  # Docker Compose
+  docker compose up -d --build
+  docker compose logs -f
+
+  # Podman Compose
+  podman-compose up -d --build
+  podman-compose logs -f
   ```
 * **Production VPS (PM2 Background Daemon)**:
   ```bash
@@ -337,6 +342,9 @@ npm run list-telegram-chats # Discover Telegram chat IDs
 npm run docker:up        # Start Docker Compose container
 npm run docker:down      # Stop Docker Compose container
 npm run docker:logs      # View Docker container logs
+npm run podman:up        # Start Podman Compose container
+npm run podman:down      # Stop Podman Compose container
+npm run podman:logs      # View Podman container logs
 npm run audit            # Run npm vulnerability audit
 ```
 

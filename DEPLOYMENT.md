@@ -8,14 +8,15 @@ This guide provides step-by-step instructions for deploying **News Feeder Bot** 
 
 1. [Architecture & System Requirements](#-architecture--system-requirements)
 2. [🆓 Oracle Cloud (OCI) Always Free VM (Recommended 100% Free Forever)](#1--oracle-cloud-oci-always-free-vm)
-3. [🆓 Google Cloud Platform (GCP) e2-micro & Cloud Run](#2--google-cloud-platform-gcp)
+3. [🆓 Google Cloud Platform (GCP) e2-micro, Cloud Run & Podman](#2--google-cloud-platform-gcp)
 4. [🚀 Fly.io (Container with Persistent Volume)](#3--flyio)
 5. [⚡ Render.com (Web Service)](#4--rendercom)
 6. [🚂 Railway.app (1-Click Container Deployment)](#5--railwayapp)
 7. [💎 Hetzner Cloud & DigitalOcean (Production VPS)](#6--hetzner-cloud--digitalocean)
 8. [☁️ Amazon Web Services (AWS Lightsail & EC2)](#7--amazon-web-services-aws)
 9. [🏠 Self-Hosted / Raspberry Pi / Home Lab](#8--self-hosted--raspberry-pi--home-lab)
-10. [🔒 Production Security & Hardening Checklist](#-production-security--hardening-checklist)
+10. [🦭 Podman & Rootless Containers (GCP / RHEL / Debian)](#9--podman--rootless-containers)
+11. [🔒 Production Security & Hardening Checklist](#-production-security--hardening-checklist)
 
 ---
 
@@ -143,16 +144,6 @@ cd news-feeder-bot
 cp .env.example .env
 nano .env  # Configure your credentials
 docker compose up -d --build
-
-### Automated Continuous Deployment (Vercel-style Auto-Deploy)
-To auto-deploy on every `git push origin master`:
-1. Generate an SSH key on your VM: `ssh-keygen -t ed25519 -f ~/.ssh/github_deploy -N "" -q <<< y`
-2. Add public key: `cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`
-3. Print base64 key: `base64 -w 0 ~/.ssh/github_deploy`
-4. In GitHub Repo **Settings → Secrets → Actions**, add:
-   - `GCP_HOST`: Your VM External IP or DuckDNS domain
-   - `GCP_USERNAME`: Your VM Linux user (`whoami`)
-   - `GCP_SSH_KEY`: The base64 key from step 3
 ```
 
 ### Option B: Google Cloud Run (Serverless Container)
@@ -168,6 +159,38 @@ gcloud run deploy news-feeder-bot \
     --min-instances 1 \
     --set-env-vars NODE_ENV=production,PORT=3000
 ```
+
+### Option C: GCP Compute Engine with Podman & Systemd (Recommended for Free Tier)
+Podman requires no root background daemon, saving ~150MB RAM on `e2-micro` instances. It also integrates directly with Linux `systemd`, guaranteeing your bot restarts automatically after scheduled weekend reboots:
+
+```bash
+# 1. Install Podman and Podman-Compose
+sudo apt update && sudo apt install -y podman podman-compose
+
+# 2. Clone and start with podman-compose
+git clone https://github.com/cyberlog69/news-feeder-bot.git
+cd news-feeder-bot
+cp .env.example .env
+nano .env
+
+# Launch via Podman Compose
+podman-compose up -d --build
+
+# 3. Make it survive VM reboots via Systemd
+sudo podman generate systemd --new --name news-feeder-bot --files /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now container-news-feeder-bot.service
+```
+
+### Automated Continuous Deployment (Vercel-style Auto-Deploy)
+To auto-deploy on every `git push origin master`:
+1. Generate an SSH key on your VM: `ssh-keygen -t ed25519 -f ~/.ssh/github_deploy -N "" -q <<< y`
+2. Add public key: `cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`
+3. Print base64 key: `base64 -w 0 ~/.ssh/github_deploy`
+4. In GitHub Repo **Settings → Secrets → Actions**, add:
+   - `GCP_HOST`: Your VM External IP or DuckDNS domain
+   - `GCP_USERNAME`: Your VM Linux user (`whoami`)
+   - `GCP_SSH_KEY`: The base64 key from step 3
 
 ---
 
@@ -324,6 +347,111 @@ docker compose up -d
 2. Create a new Project pointing to the `news-feeder-bot` folder with `docker-compose.yml`.
 3. Map `/app/data` to a persistent shared folder (e.g. `/volume1/docker/newsbot/data`).
 4. Set Environment Variables and click **Build & Start**.
+
+---
+
+## 9. 🦭 Podman & Rootless Containers (GCP / RHEL / Debian)
+
+[Podman](https://podman.io) is a daemonless, rootless container engine developed by Red Hat. It provides a drop-in replacement for Docker with substantial advantages for small cloud instances like GCP `e2-micro`:
+
+* **No Background Daemon:** Saves ~150–200 MB RAM by not running `dockerd`.
+* **Rootless Security:** Containers run under regular user accounts, mitigating privilege escalation risks.
+* **Native Systemd Integration:** Podman containers can be supervised directly by `systemd`, restarting on failure and surviving scheduled weekend reboots.
+
+### 1. Installation
+
+**Debian 12 / Ubuntu 22.04 / 24.04:**
+```bash
+sudo apt update
+sudo apt install -y podman podman-compose
+```
+
+**RHEL 9 / Rocky Linux 9 / AlmaLinux / Fedora:**
+```bash
+sudo dnf install -y podman podman-compose
+```
+
+---
+
+### 2. Running with Podman Compose
+
+The project includes built-in compatibility with `podman-compose` via `docker-compose.yml`:
+
+```bash
+# Build and run in the background
+podman-compose up -d --build
+
+# Follow logs
+podman-compose logs -f
+
+# Check container status
+podman ps
+
+# Stop container
+podman-compose down
+```
+
+> [!NOTE]
+> Bind mounts (such as `config.json`) include the `:Z` flag in `docker-compose.yml`. This automatically configures SELinux context labels so the rootless container user has read/write permissions.
+
+---
+
+### 3. Production Service via Systemd (Survives Reboots)
+
+To run the container directly under `systemd` (ideal for VMs with automatic weekend maintenance reboots):
+
+1. **Launch the container once via Podman:**
+   ```bash
+   podman build -t news-feeder-bot:latest .
+
+   podman run -d \
+     --name news-feeder-bot \
+     --restart unless-stopped \
+     --env-file .env \
+     -p 3000:3000 \
+     --shm-size 256m \
+     -v newsbot_whatsapp_auth:/app/.wwebjs_auth:Z \
+     -v newsbot_whatsapp_cache:/app/.wwebjs_cache:Z \
+     -v newsbot_data:/app/data:Z \
+     -v $(pwd)/config.json:/app/config.json:Z \
+     news-feeder-bot:latest
+   ```
+
+2. **Generate and enable the Systemd unit:**
+   ```bash
+   # Generate systemd service definition
+   sudo podman generate systemd --new --name news-feeder-bot --files /etc/systemd/system/
+
+   # Reload and enable service
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now container-news-feeder-bot.service
+   ```
+
+3. **Manage like any standard Linux service:**
+   ```bash
+   sudo systemctl status container-news-feeder-bot
+   sudo systemctl restart container-news-feeder-bot
+   journalctl -u container-news-feeder-bot -f
+   ```
+
+---
+
+### 4. Migrating from Docker to Podman
+
+If you already have existing WhatsApp authentication sessions or SQLite history in Docker volumes:
+
+```bash
+# Export existing data from Docker volume
+docker run --rm -v newsbot_whatsapp_auth:/data -v $(pwd):/backup alpine tar czf /backup/whatsapp_auth.tar.gz -C /data .
+docker run --rm -v newsbot_data:/data -v $(pwd):/backup alpine tar czf /backup/bot_data.tar.gz -C /data .
+
+# Import into Podman volumes
+podman volume create newsbot_whatsapp_auth
+podman volume create newsbot_data
+
+podman run --rm -v newsbot_whatsapp_auth:/data -v $(pwd):/backup alpine tar xzf /backup/whatsapp_auth.tar.gz -C /data
+podman run --rm -v newsbot_data:/data -v $(pwd):/backup alpine tar xzf /backup/bot_data.tar.gz -C /data
+```
 
 ---
 
