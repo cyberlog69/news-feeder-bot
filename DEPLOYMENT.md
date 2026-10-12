@@ -177,7 +177,7 @@ nano .env
 podman-compose up -d --build
 
 # 3. Make it survive VM reboots via Systemd
-sudo podman generate systemd --new --name news-feeder-bot --files /etc/systemd/system/
+sudo podman generate systemd --new --name news-feeder-bot | sudo tee /etc/systemd/system/container-news-feeder-bot.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now container-news-feeder-bot.service
 ```
@@ -420,7 +420,7 @@ To run the container directly under `systemd` (ideal for VMs with automatic week
 2. **Generate and enable the Systemd unit:**
    ```bash
    # Generate systemd service definition
-   sudo podman generate systemd --new --name news-feeder-bot --files /etc/systemd/system/
+   sudo podman generate systemd --new --name news-feeder-bot | sudo tee /etc/systemd/system/container-news-feeder-bot.service
 
    # Reload and enable service
    sudo systemctl daemon-reload
