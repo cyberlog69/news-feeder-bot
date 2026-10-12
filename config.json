@@ -91,7 +91,7 @@
     {
       "name": "Hacker News",
       "url": "https://news.ycombinator.com/",
-      "rss": "https://news.ycombinator.com/rss",
+      "rss": "https://hnrss.org/frontpage",
       "category": "🚀 Tech & Dev",
       "enabled": true,
       "reputation": 0.70
