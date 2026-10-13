@@ -3,6 +3,7 @@
   "version": "3.17.0",
   "description": "Automated cybersecurity & tech news delivery to WhatsApp, Telegram, and Discord",
   "main": "index.js",
+  "license": "MIT",
   "scripts": {
     "start": "node index.js",
     "start:prod": "NODE_ENV=production node index.js",
