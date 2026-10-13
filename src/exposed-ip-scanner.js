@@ -284,12 +284,37 @@ function saveExposedIp(record) {
   try {
     const { initDb } = require('./db');
     const db = initDb();
+
+    // Check if IP already exists to preserve initial discovery date
+    const existing = db.prepare('SELECT first_seen FROM exposed_ips WHERE ip = ?').get(record.ip);
+    const initialFirstSeen = existing?.first_seen || record.firstSeen || new Date().toISOString();
+    const currentLastSeen = record.lastSeen || new Date().toISOString();
+
     db.prepare(`
-      INSERT OR REPLACE INTO exposed_ips (
+      INSERT INTO exposed_ips (
         ip, source, country, country_code, city, org, timezone,
         ports_json, services_json, cves_json, tags_json, hostnames_json, vulns_json,
         is_noise, is_riot, gn_class, gn_name, risk_score, first_seen, last_seen
       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(ip) DO UPDATE SET
+        source = excluded.source,
+        country = CASE WHEN excluded.country != '' THEN excluded.country ELSE exposed_ips.country END,
+        country_code = CASE WHEN excluded.country_code != '' THEN excluded.country_code ELSE exposed_ips.country_code END,
+        city = CASE WHEN excluded.city != '' THEN excluded.city ELSE exposed_ips.city END,
+        org = CASE WHEN excluded.org != '' THEN excluded.org ELSE exposed_ips.org END,
+        timezone = CASE WHEN excluded.timezone != '' THEN excluded.timezone ELSE exposed_ips.timezone END,
+        ports_json = excluded.ports_json,
+        services_json = excluded.services_json,
+        cves_json = excluded.cves_json,
+        tags_json = excluded.tags_json,
+        hostnames_json = excluded.hostnames_json,
+        vulns_json = excluded.vulns_json,
+        is_noise = excluded.is_noise,
+        is_riot = excluded.is_riot,
+        gn_class = excluded.gn_class,
+        gn_name = excluded.gn_name,
+        risk_score = excluded.risk_score,
+        last_seen = excluded.last_seen
     `).run(
       record.ip,
       record.source || 'scan',
@@ -309,9 +334,24 @@ function saveExposedIp(record) {
       record.gnClass  || 'unknown',
       record.gnName   || '',
       record.riskScore || 0,
-      record.firstSeen || new Date().toISOString(),
-      record.lastSeen  || new Date().toISOString()
+      initialFirstSeen,
+      currentLastSeen
     );
+
+    // Record in historical ledger table
+    try {
+      db.prepare(`
+        INSERT INTO exposed_ips_log (ip, source, country_code, risk_score, services_json, discovered_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        record.ip,
+        record.source || 'scan',
+        record.countryCode || '',
+        record.riskScore || 0,
+        JSON.stringify(record.services || []),
+        currentLastSeen
+      );
+    } catch { /* optional ledger */ }
   } catch (err) {
     logger.warn(`[ExposedIP] DB save failed for ${record.ip}: ${err.message}`);
   }

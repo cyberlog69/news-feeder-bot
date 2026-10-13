@@ -313,14 +313,30 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         <div class="card" style="padding:14px;"><div class="label" style="color:var(--yellow)">Mass Scanners</div><div class="value" id="eiNoisy" style="color:var(--yellow)">—</div><div class="sub">GreyNoise noisy IPs</div></div>
         <div class="card" style="padding:14px;"><div class="label" style="color:var(--orange)">High Risk</div><div class="value" id="eiHighRisk" style="color:var(--orange)">—</div><div class="sub">risk score ≥ 7/10</div></div>
       </div>
-      <!-- Tab bar -->
+      <!-- Tab bar & Controls -->
       <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
         <button id="eiTabGlobal" class="btn btn-run" onclick="loadExposedIps('global')" style="font-size:12px;padding:6px 14px;">🌍 Global</button>
         <button id="eiTabIndia"  class="btn" onclick="loadExposedIps('IN')" style="font-size:12px;padding:6px 14px;">🇮🇳 India (IN)</button>
+        
+        <select id="eiMonthSelect" class="search-input" style="padding:6px 10px;font-size:12px;min-width:130px;" onchange="onExposedIpMonthChange(this.value)">
+          <option value="">📅 All Months</option>
+        </select>
+
+        <select id="eiSortSelect" class="search-input" style="padding:6px 10px;font-size:12px;min-width:140px;" onchange="onExposedIpSortChange(this.value)">
+          <option value="risk_desc">⚡ Risk (High → Low)</option>
+          <option value="risk_asc">⚡ Risk (Low → High)</option>
+          <option value="date_desc">🕒 Date (Newest first)</option>
+          <option value="date_asc">🕒 Date (Oldest first)</option>
+          <option value="ip_asc">🌐 IP Address (A-Z)</option>
+          <option value="country_asc">🏳️ Country (A-Z)</option>
+        </select>
+
         <span style="flex:1"></span>
-        <input id="eiSearchInput" class="search-input" style="min-width:180px;" placeholder="Filter by IP, country, service…" oninput="filterExposedIps(this.value)">
+        <input id="eiSearchInput" class="search-input" style="min-width:160px;" placeholder="Filter by IP, country, service…" oninput="filterExposedIps(this.value)">
         <button class="btn" onclick="seedSampleIps()" title="Load sample exposed IPs">🧪 Sample IPs</button>
         <button class="btn" onclick="triggerIpScan()" title="Trigger a fresh scan now">⟳ Refresh Scan</button>
+        <button class="btn" onclick="printExposedIpsPdf()" title="Print or save report as PDF" style="border-color:var(--blue);color:var(--blue);font-weight:600;">🖨️ Print / PDF</button>
+        <button class="btn" onclick="exportExposedIpsDoc()" title="Export report as Word Document (.doc)" style="border-color:var(--green);color:var(--green);font-weight:600;">📄 Export DOC</button>
       </div>
       <!-- Country breakdown mini-chart -->
       <div id="eiCountryBar" style="margin-bottom:14px;"></div>
@@ -864,6 +880,8 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
     var __exposedIpData = [];
     var __exposedIpFilter = '';
     var __exposedIpTab = 'global';
+    var __exposedIpMonth = '';
+    var __exposedIpSort = 'risk_desc';
 
     function riskColor(score) {
       if (score >= 8) return 'var(--red)';
@@ -886,7 +904,7 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
 
       if (!rows || rows.length === 0) {
         document.getElementById('exposedIpBox').innerHTML =
-          '<div class="log-info">No exposed IP records found' + (q ? ' matching "' + esc(q) + '"' : '') + '. Trigger a scan to populate.</div>';
+          '<div class="log-info">No exposed IP records found' + (q ? ' matching "' + esc(q) + '"' : '') + '. Select another month or click 🧪 Sample IPs / ⟳ Refresh Scan.</div>';
         return;
       }
 
@@ -935,13 +953,48 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
       renderExposedIpTable(__exposedIpData);
     }
 
+    function onExposedIpMonthChange(val) {
+      __exposedIpMonth = val || '';
+      loadExposedIps(__exposedIpTab);
+    }
+
+    function onExposedIpSortChange(val) {
+      __exposedIpSort = val || 'risk_desc';
+      loadExposedIps(__exposedIpTab);
+    }
+
+    function printExposedIpsPdf() {
+      var country = __exposedIpTab !== 'global' ? __exposedIpTab : '';
+      var params = [];
+      params.push('autoPrint=1');
+      if (country) params.push('country=' + encodeURIComponent(country));
+      if (__exposedIpMonth) params.push('month=' + encodeURIComponent(__exposedIpMonth));
+      if (__exposedIpSort) params.push('sort=' + encodeURIComponent(__exposedIpSort));
+      window.open('/api/exposed-ips/report?' + params.join('&'), '_blank');
+    }
+
+    function exportExposedIpsDoc() {
+      var country = __exposedIpTab !== 'global' ? __exposedIpTab : '';
+      var params = [];
+      params.push('format=doc');
+      if (country) params.push('country=' + encodeURIComponent(country));
+      if (__exposedIpMonth) params.push('month=' + encodeURIComponent(__exposedIpMonth));
+      if (__exposedIpSort) params.push('sort=' + encodeURIComponent(__exposedIpSort));
+      window.location.href = '/api/exposed-ips/export?' + params.join('&');
+    }
+
     async function loadExposedIps(scope) {
       __exposedIpTab = scope;
       document.getElementById('eiTabGlobal').className = scope === 'global' ? 'btn btn-run' : 'btn';
       document.getElementById('eiTabIndia').className  = scope === 'IN'     ? 'btn btn-run' : 'btn';
       document.getElementById('exposedIpBox').innerHTML = '<div class="log-info">Loading…</div>';
       try {
-        var url = '/api/exposed-ips' + (scope !== 'global' ? '?country=' + encodeURIComponent(scope) : '');
+        var queryParams = [];
+        if (scope !== 'global') queryParams.push('country=' + encodeURIComponent(scope));
+        if (__exposedIpMonth) queryParams.push('month=' + encodeURIComponent(__exposedIpMonth));
+        if (__exposedIpSort) queryParams.push('sort=' + encodeURIComponent(__exposedIpSort));
+        var url = '/api/exposed-ips' + (queryParams.length ? '?' + queryParams.join('&') : '');
+
         var res = await fetch(url);
         var data = await res.json();
 
@@ -953,7 +1006,20 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         document.getElementById('eiHighRisk').textContent = stats.highRisk  ?? '—';
         if (stats.lastUpdated) {
           document.getElementById('exposedIpLastUpdate').textContent =
-            'Last updated: ' + new Date(stats.lastUpdated).toLocaleString('en-IN');
+            'Last updated: ' + new Date(stats.lastUpdated).toLocaleString('en-IN') +
+            (__exposedIpMonth ? ' (Filter: ' + __exposedIpMonth + ')' : '');
+        }
+
+        // Dynamically populate available months if not yet loaded
+        var monthSel = document.getElementById('eiMonthSelect');
+        if (monthSel && stats.availableMonths && stats.availableMonths.length) {
+          var curVal = monthSel.value;
+          var optsHtml = '<option value="">📅 All Months</option>';
+          stats.availableMonths.forEach(function(m) {
+            optsHtml += '<option value="' + esc(m) + '"' + (m === curVal ? ' selected' : '') + '>📅 ' + esc(m) + '</option>';
+          });
+          monthSel.innerHTML = optsHtml;
+          monthSel.value = curVal;
         }
 
         // Country breakdown bar chart
@@ -973,7 +1039,7 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         renderExposedIpTable(__exposedIpData);
       } catch (e) {
         document.getElementById('exposedIpBox').innerHTML =
-          '<div class="log-info">No scan data yet. Click ⟳ Refresh Scan to start the first collection.</div>';
+          '<div class="log-info">No scan data yet. Click 🧪 Sample IPs to load initial data.</div>';
       }
     }
 
@@ -983,7 +1049,7 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
       try {
         var res = await fetch('/api/exposed-ips/seed', { method: 'POST' });
         var data = await res.json();
-        box.innerHTML = '<div class="log-success">✅ Sample IPs loaded (' + (data.seeded || data.count || 0) + ' records).</div>';
+        box.innerHTML = '<div class="log-success">✅ Sample IPs loaded (' + (data.seeded || data.total || 0) + ' records).</div>';
         setTimeout(function() { loadExposedIps(__exposedIpTab); }, 800);
       } catch (e) {
         box.innerHTML = '<div class="log-error">❌ Failed to seed sample IPs: ' + esc(e.message) + '</div>';
@@ -1957,14 +2023,68 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       try {
         const { getExposedIps, getExposedIpStats } = require('./db');
         const countryCode = (query.country || '').toUpperCase().trim() || null;
-        const limit = Math.min(Math.max(parseInt(query.limit, 10) || 200, 1), 500);
-        const ips   = getExposedIps(limit, countryCode);
-        const stats = getExposedIpStats();
+        const month       = (query.month || '').trim() || null;
+        const sortBy      = (query.sort || 'risk_desc').trim();
+        const limit       = Math.min(Math.max(parseInt(query.limit, 10) || 500, 1), 1000);
+        const ips         = getExposedIps(limit, { countryCode, month, sortBy });
+        const stats       = getExposedIpStats(month);
         res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
         res.end(JSON.stringify({ count: ips.length, ips, stats }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
         res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    // ── Printable HTML / PDF Report View ──────────────────────────────
+    if (url === '/api/exposed-ips/report' && req.method === 'GET') {
+      try {
+        const { getExposedIps, getExposedIpStats } = require('./db');
+        const { generatePrintableHtml } = require('./exposed-ip-report');
+        const countryCode = (query.country || '').toUpperCase().trim() || null;
+        const month       = (query.month || '').trim() || null;
+        const sortBy      = (query.sort || 'risk_desc').trim();
+        const ips         = getExposedIps(1000, { countryCode, month, sortBy });
+        const stats       = getExposedIpStats(month);
+        const html        = generatePrintableHtml(ips, stats, { month, countryCode, sortBy });
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          ...secureHeaders({
+            'Content-Security-Policy': "default-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+          })
+        });
+        res.end(html);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'text/plain', ...secureHeaders() });
+        res.end('Report generation error: ' + err.message);
+      }
+      return;
+    }
+
+    // ── Microsoft Word (.doc) Document Export ─────────────────────────
+    if (url === '/api/exposed-ips/export' && req.method === 'GET') {
+      try {
+        const { getExposedIps, getExposedIpStats } = require('./db');
+        const { generateWordDoc } = require('./exposed-ip-report');
+        const countryCode = (query.country || '').toUpperCase().trim() || null;
+        const month       = (query.month || '').trim() || null;
+        const sortBy      = (query.sort || 'risk_desc').trim();
+        const ips         = getExposedIps(1000, { countryCode, month, sortBy });
+        const stats       = getExposedIpStats(month);
+        const doc         = generateWordDoc(ips, stats, { month, countryCode, sortBy });
+        const filename    = `Exposed-IPs-Report-${month || 'All'}-${countryCode || 'Global'}.doc`;
+        res.writeHead(200, {
+          'Content-Type': 'application/msword; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Cache-Control': 'no-store',
+          ...secureHeaders()
+        });
+        res.end(doc);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'text/plain', ...secureHeaders() });
+        res.end('Export error: ' + err.message);
       }
       return;
     }

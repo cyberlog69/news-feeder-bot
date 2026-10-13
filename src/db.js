@@ -154,6 +154,17 @@ function initDb() {
       CREATE INDEX IF NOT EXISTS idx_exposed_ips_country ON exposed_ips(country_code);
       CREATE INDEX IF NOT EXISTS idx_exposed_ips_risk ON exposed_ips(risk_score DESC);
       CREATE INDEX IF NOT EXISTS idx_exposed_ips_last_seen ON exposed_ips(last_seen DESC);
+
+      CREATE TABLE IF NOT EXISTS exposed_ips_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT NOT NULL,
+        source TEXT,
+        country_code TEXT,
+        risk_score REAL,
+        services_json TEXT,
+        discovered_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_exposed_ips_log_date ON exposed_ips_log(discovered_at DESC);
     `);
 
     // Migrate legacy JSON files if they exist
@@ -764,6 +775,11 @@ function seedSampleExposedIps(database = null) {
     `);
 
     let inserted = 0;
+    const logInsert = db.prepare(`
+      INSERT INTO exposed_ips_log (ip, source, country_code, risk_score, services_json, discovered_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
     for (const record of SAMPLE_EXPOSED_IPS) {
       insert.run(
         record.ip,
@@ -787,6 +803,18 @@ function seedSampleExposedIps(database = null) {
         record.firstSeen || new Date().toISOString(),
         record.lastSeen  || new Date().toISOString()
       );
+
+      try {
+        logInsert.run(
+          record.ip,
+          record.source || 'Seed',
+          record.countryCode || '',
+          record.riskScore || 0,
+          JSON.stringify(record.services || []),
+          record.firstSeen || new Date().toISOString()
+        );
+      } catch { /* optional audit log */ }
+
       inserted++;
     }
     return inserted;
@@ -797,30 +825,69 @@ function seedSampleExposedIps(database = null) {
 }
 
 /**
- * Retrieve all exposed IPs, sorted by risk descending.
+ * Retrieve exposed IPs, with optional monthly filtering, country scoping, and sorting.
  * @param {number} [limit=100]
- * @param {string} [countryCode] - optional ISO-2 filter (e.g. 'IN')
+ * @param {string|object} [filterOptions=null] - ISO-2 string (e.g. 'IN') OR { countryCode, month, sortBy }
  * @returns {object[]}
  */
-function getExposedIps(limit = 100, countryCode = null) {
+function getExposedIps(limit = 100, filterOptions = null) {
   const database = initDb();
-  let rows;
+  const opts = typeof filterOptions === 'string'
+    ? { countryCode: filterOptions }
+    : (filterOptions || {});
+
+  const countryCode = (opts.countryCode || opts.country || '').toUpperCase().trim() || null;
+  const month = (opts.month || '').trim() || null;
+  const sortBy = opts.sortBy || opts.sort || 'risk_desc';
+
+  const whereParts = [];
+  const params = [];
+
   if (countryCode) {
-    rows = database.prepare(
-      'SELECT * FROM exposed_ips WHERE country_code = ? ORDER BY risk_score DESC, last_seen DESC LIMIT ?'
-    ).all(countryCode.toUpperCase(), limit);
-  } else {
-    rows = database.prepare(
-      'SELECT * FROM exposed_ips ORDER BY risk_score DESC, last_seen DESC LIMIT ?'
-    ).all(limit);
+    whereParts.push('country_code = ?');
+    params.push(countryCode);
   }
+
+  if (month) {
+    whereParts.push('(substr(first_seen, 1, 7) = ? OR substr(last_seen, 1, 7) = ?)');
+    params.push(month, month);
+  }
+
+  const whereSql = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+  let orderSql = 'ORDER BY risk_score DESC, last_seen DESC';
+  switch (sortBy) {
+    case 'risk_asc':
+      orderSql = 'ORDER BY risk_score ASC, last_seen DESC';
+      break;
+    case 'date_desc':
+      orderSql = 'ORDER BY last_seen DESC, first_seen DESC';
+      break;
+    case 'date_asc':
+      orderSql = 'ORDER BY first_seen ASC, last_seen ASC';
+      break;
+    case 'ip_asc':
+      orderSql = 'ORDER BY ip ASC';
+      break;
+    case 'country_asc':
+      orderSql = 'ORDER BY country ASC, ip ASC';
+      break;
+    case 'risk_desc':
+    default:
+      orderSql = 'ORDER BY risk_score DESC, last_seen DESC';
+      break;
+  }
+
+  let rows = database.prepare(
+    `SELECT * FROM exposed_ips ${whereSql} ${orderSql} LIMIT ?`
+  ).all(...params, limit);
 
   // If table is completely empty, auto-seed and query again
   if (!rows || rows.length === 0) {
     const total = database.prepare('SELECT COUNT(*) as c FROM exposed_ips').get()?.c || 0;
     if (total === 0) {
       seedSampleExposedIps(database);
-      return getExposedIps(limit, countryCode);
+      return getExposedIps(limit, filterOptions);
     }
   }
 
@@ -828,20 +895,40 @@ function getExposedIps(limit = 100, countryCode = null) {
 }
 
 /**
- * Return summary counts for the dashboard cards.
- * @returns {{ total: number, malicious: number, noisy: number, highRisk: number, byCountry: object[] }}
+ * Return summary counts and available filter months for the dashboard cards and selectors.
+ * @param {string} [month] - optional month filter (e.g. '2026-10')
+ * @returns {{ total: number, malicious: number, noisy: number, highRisk: number, byCountry: object[], availableMonths: string[], allTimeGenerated: number }}
  */
-function getExposedIpStats() {
+function getExposedIpStats(month = null) {
   const database = initDb();
-  const total     = database.prepare('SELECT COUNT(*) as c FROM exposed_ips').get().c;
-  const malicious = database.prepare("SELECT COUNT(*) as c FROM exposed_ips WHERE gn_class = 'malicious'").get().c;
-  const noisy     = database.prepare('SELECT COUNT(*) as c FROM exposed_ips WHERE is_noise = 1').get().c;
-  const highRisk  = database.prepare('SELECT COUNT(*) as c FROM exposed_ips WHERE risk_score >= 7').get().c;
+  const whereSql = month ? 'WHERE (substr(first_seen, 1, 7) = ? OR substr(last_seen, 1, 7) = ?)' : '';
+  const params = month ? [month, month] : [];
+
+  const total     = database.prepare(`SELECT COUNT(*) as c FROM exposed_ips ${whereSql}`).get(...params).c;
+  const malicious = database.prepare(`SELECT COUNT(*) as c FROM exposed_ips ${whereSql ? whereSql + ' AND' : 'WHERE'} gn_class = 'malicious'`).get(...params).c;
+  const noisy     = database.prepare(`SELECT COUNT(*) as c FROM exposed_ips ${whereSql ? whereSql + ' AND' : 'WHERE'} is_noise = 1`).get(...params).c;
+  const highRisk  = database.prepare(`SELECT COUNT(*) as c FROM exposed_ips ${whereSql ? whereSql + ' AND' : 'WHERE'} risk_score >= 7`).get(...params).c;
   const byCountry = database.prepare(
-    'SELECT country, country_code, COUNT(*) as count FROM exposed_ips WHERE country_code != \'\' GROUP BY country_code ORDER BY count DESC LIMIT 10'
-  ).all();
+    `SELECT country, country_code, COUNT(*) as count FROM exposed_ips ${whereSql ? whereSql + ' AND' : 'WHERE'} country_code != '' GROUP BY country_code ORDER BY count DESC LIMIT 10`
+  ).all(...params);
   const lastUpdated = database.prepare('SELECT MAX(last_seen) as ts FROM exposed_ips').get().ts || null;
-  return { total, malicious, noisy, highRisk, byCountry, lastUpdated };
+
+  // Retrieve all distinct months for the monthly dropdown filter
+  const monthRows = database.prepare(`
+    SELECT DISTINCT substr(first_seen, 1, 7) as m FROM exposed_ips WHERE first_seen != ''
+    UNION
+    SELECT DISTINCT substr(last_seen, 1, 7) as m FROM exposed_ips WHERE last_seen != ''
+    ORDER BY m DESC
+  `).all();
+  const availableMonths = monthRows.map((r) => r.m).filter(Boolean);
+
+  let allTimeGenerated = total;
+  try {
+    const logCount = database.prepare('SELECT COUNT(*) as c FROM exposed_ips_log').get()?.c || 0;
+    if (logCount > allTimeGenerated) allTimeGenerated = logCount;
+  } catch { /* optional */ }
+
+  return { total, malicious, noisy, highRisk, byCountry, lastUpdated, availableMonths, allTimeGenerated };
 }
 
 /**
