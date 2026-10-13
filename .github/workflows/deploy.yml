@@ -83,10 +83,16 @@ jobs:
               sudo systemctl status news-feeder-bot.service --no-pager
             elif command -v podman-compose &>/dev/null; then
               echo "🔨 Rebuilding and restarting with Podman Compose..."
+              podman-compose down 2>/dev/null || true
+              podman stop news-feeder-bot 2>/dev/null || true
+              podman rm -f news-feeder-bot 2>/dev/null || true
               podman-compose up -d --build
               podman image prune -f 2>/dev/null || true
             elif command -v docker &>/dev/null; then
               echo "🔨 Rebuilding and restarting with Docker..."
+              docker compose down 2>/dev/null || docker-compose down 2>/dev/null || true
+              docker stop news-feeder-bot 2>/dev/null || true
+              docker rm -f news-feeder-bot 2>/dev/null || true
               docker compose up -d --build 2>/dev/null || docker-compose up -d --build
               docker image prune -f
             fi

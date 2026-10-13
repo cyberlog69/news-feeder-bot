@@ -159,6 +159,13 @@ function initDb() {
     // Migrate legacy JSON files if they exist
     migrateLegacyJson(db);
 
+    // Auto-seed sample exposed IPs if table is currently empty
+    try {
+      seedSampleExposedIps(db);
+    } catch {
+      // Non-fatal if module loading during migration
+    }
+
     logger.info(`SQLite database initialized at: data/newsbot.sqlite`);
     return db;
   } catch (err) {
@@ -735,6 +742,61 @@ function parseExposedIpRow(row) {
 }
 
 /**
+ * Seed sample exposed IPs into SQLite if table is empty, or forced.
+ * @param {object} [database] - database instance
+ * @returns {number} count of seeded records
+ */
+function seedSampleExposedIps(database = null) {
+  const db = database || initDb();
+  try {
+    const count = db.prepare('SELECT COUNT(*) as c FROM exposed_ips').get()?.c || 0;
+    if (count > 0) return 0;
+
+    const { SAMPLE_EXPOSED_IPS } = require('./exposed-ip-scanner');
+    if (!SAMPLE_EXPOSED_IPS || !SAMPLE_EXPOSED_IPS.length) return 0;
+
+    const insert = db.prepare(`
+      INSERT OR REPLACE INTO exposed_ips (
+        ip, source, country, country_code, city, org, timezone,
+        ports_json, services_json, cves_json, tags_json, hostnames_json, vulns_json,
+        is_noise, is_riot, gn_class, gn_name, risk_score, first_seen, last_seen
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `);
+
+    let inserted = 0;
+    for (const record of SAMPLE_EXPOSED_IPS) {
+      insert.run(
+        record.ip,
+        record.source || 'Seed',
+        record.country || '',
+        record.countryCode || '',
+        record.city || '',
+        record.org || '',
+        record.timezone || '',
+        JSON.stringify(record.ports    || []),
+        JSON.stringify(record.services || []),
+        JSON.stringify(record.cves     || []),
+        JSON.stringify(record.tags     || []),
+        JSON.stringify(record.hostnames || []),
+        JSON.stringify(record.vulns    || []),
+        record.isNoise  ? 1 : 0,
+        record.isRiot   ? 1 : 0,
+        record.gnClass  || 'unknown',
+        record.gnName   || '',
+        record.riskScore || 0,
+        record.firstSeen || new Date().toISOString(),
+        record.lastSeen  || new Date().toISOString()
+      );
+      inserted++;
+    }
+    return inserted;
+  } catch (err) {
+    logger.warn(`[ExposedIP] Sample seed failed: ${err.message}`);
+    return 0;
+  }
+}
+
+/**
  * Retrieve all exposed IPs, sorted by risk descending.
  * @param {number} [limit=100]
  * @param {string} [countryCode] - optional ISO-2 filter (e.g. 'IN')
@@ -752,7 +814,17 @@ function getExposedIps(limit = 100, countryCode = null) {
       'SELECT * FROM exposed_ips ORDER BY risk_score DESC, last_seen DESC LIMIT ?'
     ).all(limit);
   }
-  return rows.map(parseExposedIpRow);
+
+  // If table is completely empty, auto-seed and query again
+  if (!rows || rows.length === 0) {
+    const total = database.prepare('SELECT COUNT(*) as c FROM exposed_ips').get()?.c || 0;
+    if (total === 0) {
+      seedSampleExposedIps(database);
+      return getExposedIps(limit, countryCode);
+    }
+  }
+
+  return (rows || []).map(parseExposedIpRow);
 }
 
 /**
@@ -826,5 +898,6 @@ module.exports = {
   getAllPodcastEpisodes,
   getExposedIps,
   getExposedIpStats,
+  seedSampleExposedIps,
   pruneExposedIps
 };

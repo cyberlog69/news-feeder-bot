@@ -319,6 +319,7 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         <button id="eiTabIndia"  class="btn" onclick="loadExposedIps('IN')" style="font-size:12px;padding:6px 14px;">🇮🇳 India (IN)</button>
         <span style="flex:1"></span>
         <input id="eiSearchInput" class="search-input" style="min-width:180px;" placeholder="Filter by IP, country, service…" oninput="filterExposedIps(this.value)">
+        <button class="btn" onclick="seedSampleIps()" title="Load sample exposed IPs">🧪 Sample IPs</button>
         <button class="btn" onclick="triggerIpScan()" title="Trigger a fresh scan now">⟳ Refresh Scan</button>
       </div>
       <!-- Country breakdown mini-chart -->
@@ -973,6 +974,19 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
       } catch (e) {
         document.getElementById('exposedIpBox').innerHTML =
           '<div class="log-info">No scan data yet. Click ⟳ Refresh Scan to start the first collection.</div>';
+      }
+    }
+
+    async function seedSampleIps() {
+      var box = document.getElementById('exposedIpBox');
+      box.innerHTML = '<div class="log-info">⏳ Loading sample exposed IP intelligence…</div>';
+      try {
+        var res = await fetch('/api/exposed-ips/seed', { method: 'POST' });
+        var data = await res.json();
+        box.innerHTML = '<div class="log-success">✅ Sample IPs loaded (' + (data.seeded || data.count || 0) + ' records).</div>';
+        setTimeout(function() { loadExposedIps(__exposedIpTab); }, 800);
+      } catch (e) {
+        box.innerHTML = '<div class="log-error">❌ Failed to seed sample IPs: ' + esc(e.message) + '</div>';
       }
     }
 
@@ -1971,6 +1985,22 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
           logger.warn(`[ExposedIP] On-demand scan error: ${err.message}`);
         }
       });
+      return;
+    }
+
+    // Seed or reset sample exposed IPs on demand
+    if (url === '/api/exposed-ips/seed' && req.method === 'POST') {
+      try {
+        const { seedSampleExposedIps, getExposedIps, getExposedIpStats } = require('./db');
+        const count = seedSampleExposedIps();
+        const ips = getExposedIps(200);
+        const stats = getExposedIpStats();
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ success: true, seeded: count, total: ips.length, ips, stats }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
       return;
     }
 
