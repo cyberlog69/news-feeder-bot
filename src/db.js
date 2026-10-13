@@ -128,6 +128,32 @@ function initDb() {
         duration TEXT,
         created_at TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS exposed_ips (
+        ip TEXT PRIMARY KEY,
+        source TEXT,
+        country TEXT,
+        country_code TEXT,
+        city TEXT,
+        org TEXT,
+        timezone TEXT,
+        ports_json TEXT,
+        services_json TEXT,
+        cves_json TEXT,
+        tags_json TEXT,
+        hostnames_json TEXT,
+        vulns_json TEXT,
+        is_noise INTEGER DEFAULT 0,
+        is_riot INTEGER DEFAULT 0,
+        gn_class TEXT,
+        gn_name TEXT,
+        risk_score REAL DEFAULT 0,
+        first_seen TEXT,
+        last_seen TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_exposed_ips_country ON exposed_ips(country_code);
+      CREATE INDEX IF NOT EXISTS idx_exposed_ips_risk ON exposed_ips(risk_score DESC);
+      CREATE INDEX IF NOT EXISTS idx_exposed_ips_last_seen ON exposed_ips(last_seen DESC);
     `);
 
     // Migrate legacy JSON files if they exist
@@ -675,6 +701,91 @@ function getAllPodcastEpisodes(limit = 20) {
   return stmt.all(limit);
 }
 
+// ── Exposed IPs Storage API ───────────────────────────────────────────────────
+
+/**
+ * Deserialise JSON columns on an exposed_ips row into proper arrays.
+ * @param {object} row - raw SQLite row
+ * @returns {object}
+ */
+function parseExposedIpRow(row) {
+  if (!row) return null;
+  return {
+    ip:          row.ip,
+    source:      row.source      || '',
+    country:     row.country     || '',
+    countryCode: row.country_code || '',
+    city:        row.city        || '',
+    org:         row.org         || '',
+    timezone:    row.timezone    || '',
+    ports:       JSON.parse(row.ports_json    || '[]'),
+    services:    JSON.parse(row.services_json || '[]'),
+    cves:        JSON.parse(row.cves_json     || '[]'),
+    tags:        JSON.parse(row.tags_json     || '[]'),
+    hostnames:   JSON.parse(row.hostnames_json || '[]'),
+    vulns:       JSON.parse(row.vulns_json    || '[]'),
+    isNoise:     Boolean(row.is_noise),
+    isRiot:      Boolean(row.is_riot),
+    gnClass:     row.gn_class   || 'unknown',
+    gnName:      row.gn_name    || '',
+    riskScore:   row.risk_score || 0,
+    firstSeen:   row.first_seen || '',
+    lastSeen:    row.last_seen  || ''
+  };
+}
+
+/**
+ * Retrieve all exposed IPs, sorted by risk descending.
+ * @param {number} [limit=100]
+ * @param {string} [countryCode] - optional ISO-2 filter (e.g. 'IN')
+ * @returns {object[]}
+ */
+function getExposedIps(limit = 100, countryCode = null) {
+  const database = initDb();
+  let rows;
+  if (countryCode) {
+    rows = database.prepare(
+      'SELECT * FROM exposed_ips WHERE country_code = ? ORDER BY risk_score DESC, last_seen DESC LIMIT ?'
+    ).all(countryCode.toUpperCase(), limit);
+  } else {
+    rows = database.prepare(
+      'SELECT * FROM exposed_ips ORDER BY risk_score DESC, last_seen DESC LIMIT ?'
+    ).all(limit);
+  }
+  return rows.map(parseExposedIpRow);
+}
+
+/**
+ * Return summary counts for the dashboard cards.
+ * @returns {{ total: number, malicious: number, noisy: number, highRisk: number, byCountry: object[] }}
+ */
+function getExposedIpStats() {
+  const database = initDb();
+  const total     = database.prepare('SELECT COUNT(*) as c FROM exposed_ips').get().c;
+  const malicious = database.prepare("SELECT COUNT(*) as c FROM exposed_ips WHERE gn_class = 'malicious'").get().c;
+  const noisy     = database.prepare('SELECT COUNT(*) as c FROM exposed_ips WHERE is_noise = 1').get().c;
+  const highRisk  = database.prepare('SELECT COUNT(*) as c FROM exposed_ips WHERE risk_score >= 7').get().c;
+  const byCountry = database.prepare(
+    'SELECT country, country_code, COUNT(*) as count FROM exposed_ips WHERE country_code != \'\' GROUP BY country_code ORDER BY count DESC LIMIT 10'
+  ).all();
+  const lastUpdated = database.prepare('SELECT MAX(last_seen) as ts FROM exposed_ips').get().ts || null;
+  return { total, malicious, noisy, highRisk, byCountry, lastUpdated };
+}
+
+/**
+ * Delete exposed IP records older than `days` days.
+ * @param {number} [days=7]
+ * @returns {number} deleted count
+ */
+function pruneExposedIps(days = 7) {
+  const database = initDb();
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+  const result = database.prepare(
+    'DELETE FROM exposed_ips WHERE last_seen < ?'
+  ).run(cutoff);
+  return result.changes;
+}
+
 module.exports = {
   initDb,
   isUrlSeen,
@@ -712,5 +823,8 @@ module.exports = {
   removeWatchlistKeyword,
   savePodcastEpisode,
   getLatestPodcastEpisode,
-  getAllPodcastEpisodes
+  getAllPodcastEpisodes,
+  getExposedIps,
+  getExposedIpStats,
+  pruneExposedIps
 };

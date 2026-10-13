@@ -107,7 +107,10 @@
     "maintenanceHour": 3,
     "backupRetentionDays": 30,
     "enableThreatOps": true,
-    "threatOpsHour": 2
+    "threatOpsHour": 2,
+    "exposedIpScanHour": 3,
+    "enableExposedIpScan": true,
+    "_exposedIpScanComment": "Daily scan of publicly exposed IPs from Shodan InternetDB, GreyNoise Community, and Shadowserver. Hour 0-23. Requires no API key."
   },
   "filters": {
     "enabled": false,

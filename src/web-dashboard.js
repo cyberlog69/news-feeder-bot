@@ -302,6 +302,33 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
     </div>
   </section>
 
+  <!-- Exposed IPs & WAN Intelligence Panel -->
+  <section id="exposed-ip-section">
+    <h2>🌐 Exposed IPs &amp; WAN Intelligence <span id="exposedIpLastUpdate" style="font-size:11px;color:var(--muted);margin-left:10px">Loading…</span></h2>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;">
+      <!-- Stats cards row -->
+      <div id="exposedIpStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+        <div class="card" style="padding:14px;"><div class="label">Total IPs</div><div class="value" id="eiTotal">—</div><div class="sub">indexed exposed hosts</div></div>
+        <div class="card" style="padding:14px;"><div class="label" style="color:var(--red)">Malicious</div><div class="value" id="eiMalicious" style="color:var(--red)">—</div><div class="sub">classified malicious</div></div>
+        <div class="card" style="padding:14px;"><div class="label" style="color:var(--yellow)">Mass Scanners</div><div class="value" id="eiNoisy" style="color:var(--yellow)">—</div><div class="sub">GreyNoise noisy IPs</div></div>
+        <div class="card" style="padding:14px;"><div class="label" style="color:var(--orange)">High Risk</div><div class="value" id="eiHighRisk" style="color:var(--orange)">—</div><div class="sub">risk score ≥ 7/10</div></div>
+      </div>
+      <!-- Tab bar -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <button id="eiTabGlobal" class="btn btn-run" onclick="loadExposedIps('global')" style="font-size:12px;padding:6px 14px;">🌍 Global</button>
+        <button id="eiTabIndia"  class="btn" onclick="loadExposedIps('IN')" style="font-size:12px;padding:6px 14px;">🇮🇳 India (IN)</button>
+        <span style="flex:1"></span>
+        <input id="eiSearchInput" class="search-input" style="min-width:180px;" placeholder="Filter by IP, country, service…" oninput="filterExposedIps(this.value)">
+        <button class="btn" onclick="triggerIpScan()" title="Trigger a fresh scan now">⟳ Refresh Scan</button>
+      </div>
+      <!-- Country breakdown mini-chart -->
+      <div id="eiCountryBar" style="margin-bottom:14px;"></div>
+      <!-- Main table -->
+      <div id="exposedIpBox"><div class="log-info">Loading exposed IP intelligence…</div></div>
+      <p style="color:var(--muted);font-size:11px;margin-top:10px;">💡 Data sourced from <b>Shodan InternetDB</b>, <b>GreyNoise Community</b>, and <b>Shadowserver</b> public feeds. Updated daily. No active scanning is performed.</p>
+    </div>
+  </section>
+
   <section>
     <h2>Live Log (today)</h2>
     <div class="log-box">${logHtml || '<div class="log-info">No logs yet today</div>'}</div>
@@ -831,6 +858,139 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
     loadPocRadar();
     loadPodcast();
     loadWatchlist();
+
+    // ── Exposed IPs & WAN Intelligence ──────────────────────────────────
+    var __exposedIpData = [];
+    var __exposedIpFilter = '';
+    var __exposedIpTab = 'global';
+
+    function riskColor(score) {
+      if (score >= 8) return 'var(--red)';
+      if (score >= 5) return 'var(--orange)';
+      if (score >= 3) return 'var(--yellow)';
+      return 'var(--green)';
+    }
+
+    function riskBadge(score) {
+      var label = score >= 8 ? 'CRITICAL' : score >= 5 ? 'HIGH' : score >= 3 ? 'MEDIUM' : 'LOW';
+      var color = riskColor(score);
+      return '<span style="background:' + color + ';color:#000;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;">' + label + '</span>';
+    }
+
+    function renderExposedIpTable(data) {
+      var q = __exposedIpFilter.toLowerCase();
+      var rows = q ? data.filter(function(r) {
+        return (r.ip + r.country + r.org + (r.services || []).join(' ') + (r.tags || []).join(' ')).toLowerCase().includes(q);
+      }) : data;
+
+      if (!rows || rows.length === 0) {
+        document.getElementById('exposedIpBox').innerHTML =
+          '<div class="log-info">No exposed IP records found' + (q ? ' matching "' + esc(q) + '"' : '') + '. Trigger a scan to populate.</div>';
+        return;
+      }
+
+      var html = '<table><thead><tr>' +
+        '<th>Risk</th><th>IP Address</th><th>Country</th><th>Org / ASN</th>' +
+        '<th>Open Services</th><th>CVEs</th><th>Tags</th><th>Classification</th><th>Last Seen</th>' +
+        '</tr></thead><tbody>';
+
+      rows.forEach(function(r) {
+        var svcs = (r.services || []).slice(0, 5).map(function(s) {
+          return '<span style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:10px;margin:1px;display:inline-block">' + esc(s) + '</span>';
+        }).join('');
+
+        var cveList = (r.cves || []).slice(0, 3).map(function(c) {
+          return '<span style="color:var(--red);font-size:10px;">' + esc(c) + '</span>';
+        }).join(' ');
+
+        var tagList = (r.tags || []).slice(0, 3).map(function(t) {
+          return '<span style="background:rgba(251,191,36,0.15);color:var(--yellow);font-size:10px;padding:1px 5px;border-radius:4px;">' + esc(t) + '</span>';
+        }).join(' ');
+
+        var classColor = r.gnClass === 'malicious' ? 'var(--red)' : r.gnClass === 'benign' ? 'var(--green)' : 'var(--muted)';
+        var classIcon  = r.gnClass === 'malicious' ? '⛔' : r.gnClass === 'benign' ? '✅' : r.isNoise ? '📡' : '❓';
+        var ls = r.lastSeen ? new Date(r.lastSeen).toLocaleDateString('en-IN') : '—';
+
+        html += '<tr>' +
+          '<td>' + riskBadge(r.riskScore) + ' <b style="color:' + riskColor(r.riskScore) + ';font-size:12px;margin-left:3px">' + (r.riskScore || 0).toFixed(1) + '</b></td>' +
+          '<td><code style="color:var(--blue);font-size:12px">' + esc(r.ip) + '</code></td>' +
+          '<td>' + esc(r.country || r.countryCode || '—') + (r.city ? '<br><span style="color:var(--muted);font-size:10px">' + esc(r.city) + '</span>' : '') + '</td>' +
+          '<td style="font-size:11px;color:var(--muted);max-width:160px;word-break:break-all">' + esc((r.org || '').slice(0, 50)) + '</td>' +
+          '<td>' + (svcs || '<span style="color:var(--muted);font-size:10px">—</span>') + '</td>' +
+          '<td>' + (cveList || '<span style="color:var(--muted);font-size:10px">None</span>') + '</td>' +
+          '<td>' + (tagList || '<span style="color:var(--muted);font-size:10px">—</span>') + '</td>' +
+          '<td><span style="color:' + classColor + ';font-weight:600;font-size:11px">' + classIcon + ' ' + esc(r.gnClass || 'unknown') + '</span>' +
+            (r.isNoise ? ' <span style="font-size:10px;color:var(--muted)">(noisy)</span>' : '') + '</td>' +
+          '<td style="white-space:nowrap;font-size:11px">' + ls + '</td>' +
+        '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('exposedIpBox').innerHTML = html;
+    }
+
+    function filterExposedIps(q) {
+      __exposedIpFilter = q;
+      renderExposedIpTable(__exposedIpData);
+    }
+
+    async function loadExposedIps(scope) {
+      __exposedIpTab = scope;
+      document.getElementById('eiTabGlobal').className = scope === 'global' ? 'btn btn-run' : 'btn';
+      document.getElementById('eiTabIndia').className  = scope === 'IN'     ? 'btn btn-run' : 'btn';
+      document.getElementById('exposedIpBox').innerHTML = '<div class="log-info">Loading…</div>';
+      try {
+        var url = '/api/exposed-ips' + (scope !== 'global' ? '?country=' + encodeURIComponent(scope) : '');
+        var res = await fetch(url);
+        var data = await res.json();
+
+        // Update summary stats
+        var stats = data.stats || {};
+        document.getElementById('eiTotal').textContent    = stats.total    ?? '—';
+        document.getElementById('eiMalicious').textContent = stats.malicious ?? '—';
+        document.getElementById('eiNoisy').textContent    = stats.noisy     ?? '—';
+        document.getElementById('eiHighRisk').textContent = stats.highRisk  ?? '—';
+        if (stats.lastUpdated) {
+          document.getElementById('exposedIpLastUpdate').textContent =
+            'Last updated: ' + new Date(stats.lastUpdated).toLocaleString('en-IN');
+        }
+
+        // Country breakdown bar chart
+        var byCountry = stats.byCountry || [];
+        var maxC = Math.max.apply(null, byCountry.map(function(c){return c.count;}).concat([1]));
+        document.getElementById('eiCountryBar').innerHTML = byCountry.length ? (
+          '<div style="margin-bottom:6px;color:var(--muted);font-size:11px;text-transform:uppercase;font-weight:600;letter-spacing:.05em">Top Countries</div>' +
+          byCountry.slice(0, 8).map(function(c) {
+            var pct = Math.round((c.count / maxC) * 100);
+            return '<div class="bar-row"><div class="bar-label" style="min-width:80px">' + esc(c.country_code || c.countryCode || '??') + '</div>' +
+              '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:var(--blue)"></div></div>' +
+              '<div class="bar-count">' + c.count + '</div></div>';
+          }).join('')
+        ) : '';
+
+        __exposedIpData = data.ips || [];
+        renderExposedIpTable(__exposedIpData);
+      } catch (e) {
+        document.getElementById('exposedIpBox').innerHTML =
+          '<div class="log-info">No scan data yet. Click ⟳ Refresh Scan to start the first collection.</div>';
+      }
+    }
+
+    async function triggerIpScan() {
+      var box = document.getElementById('exposedIpBox');
+      box.innerHTML = '<div class="log-info">⏳ Triggering exposed-IP scan in background…</div>';
+      try {
+        var res = await fetch('/api/exposed-ips/scan', { method: 'POST' });
+        var data = await res.json();
+        box.innerHTML = '<div class="log-success">✅ ' + (data.message || 'Scan triggered!') + ' Results will appear after the scan completes (30–120s).</div>';
+        setTimeout(function() { loadExposedIps(__exposedIpTab); }, 3000);
+      } catch (e) {
+        box.innerHTML = '<div class="log-error">❌ Scan trigger failed: ' + esc(e.message) + '</div>';
+      }
+    }
+
+    // Auto-load exposed IPs panel on page load
+    loadExposedIps('global');
 
     async function triggerRun() {
       const btn    = document.getElementById('runNowBtn');
@@ -1778,7 +1938,44 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
       return;
     }
 
+    // ── Exposed IPs & WAN Intelligence API ─────────────────────────────
+    if (url === '/api/exposed-ips' && req.method === 'GET') {
+      try {
+        const { getExposedIps, getExposedIpStats } = require('./db');
+        const countryCode = (query.country || '').toUpperCase().trim() || null;
+        const limit = Math.min(Math.max(parseInt(query.limit, 10) || 200, 1), 500);
+        const ips   = getExposedIps(limit, countryCode);
+        const stats = getExposedIpStats();
+        res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ count: ips.length, ips, stats }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json', ...secureHeaders() });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    // Trigger a background IP scan on demand
+    if (url === '/api/exposed-ips/scan' && req.method === 'POST') {
+      res.writeHead(200, { 'Content-Type': 'application/json', ...secureHeaders() });
+      res.end(JSON.stringify({ message: 'Exposed-IP scan triggered in background. Refresh in ~60s.' }));
+      // Fire-and-forget
+      setImmediate(async () => {
+        try {
+          const { runDailyScan } = require('./exposed-ip-scanner');
+          const logger = require('./logger');
+          const saved = await runDailyScan();
+          logger.success(`[ExposedIP] On-demand scan complete — ${saved} records`);
+        } catch (err) {
+          const logger = require('./logger');
+          logger.warn(`[ExposedIP] On-demand scan error: ${err.message}`);
+        }
+      });
+      return;
+    }
+
     // ── Sources API ────────────────────────────────────────────────────
+
     if (url === '/api/sources' && req.method === 'GET') {
       const config = pipeline.config || {};
       const { getFeedHealth } = require('./fetcher');

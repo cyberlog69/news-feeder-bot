@@ -29,6 +29,7 @@ const {
 const { startDashboard } = require('./src/web-dashboard');
 const { validateEnv }    = require('./src/env-validator');
 const { syncThreatData, runRansomwareTracking } = require('./src/threat-ops');
+const { runDailyScan: runExposedIpScan } = require('./src/exposed-ip-scanner');
 const logger             = require('./src/logger');
 
 const BOT_START_TIME = Date.now();
@@ -314,6 +315,29 @@ async function main() {
       });
       logger.info(`Daily threat ops scheduled at ${threatOpsHour}:00`);
     }
+  }
+
+  // ── Exposed IP Scanner: daily WAN / publicly exposed IP collection ────────────────
+  const exposedIpEnabled = config.settings?.enableExposedIpScan !== false;
+  if (exposedIpEnabled) {
+    // Fire an initial scan 2 minutes after boot (non-blocking)
+    setTimeout(() => {
+      runExposedIpScan().catch((err) =>
+        logger.warn(`[ExposedIP] Startup scan failed: ${err.message.split('\n')[0]}`)
+      );
+    }, 2 * 60 * 1000);
+
+    // Daily cron — configurable via config.settings.exposedIpScanHour (default 3 AM)
+    const exposedIpHour = parseInt(config.settings?.exposedIpScanHour, 10);
+    const scanHour = (!isNaN(exposedIpHour) && exposedIpHour >= 0 && exposedIpHour <= 23)
+      ? exposedIpHour : 3;
+    cron.schedule(`0 ${scanHour} * * *`, async () => {
+      logger.info('[ExposedIP] Running daily exposed-IP scan…');
+      await runExposedIpScan().catch((err) =>
+        logger.warn(`[ExposedIP] Daily scan failed: ${err.message.split('\n')[0]}`)
+      );
+    });
+    logger.info(`[ExposedIP] Daily scan scheduled at ${scanHour}:00 — startup warm-up in 2 min`);
   }
 }
 
