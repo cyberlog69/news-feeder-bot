@@ -30,7 +30,6 @@
 - [Organization Tech Stack Watchlist](#-organization-tech-stack-watchlist)
 - [Interactive Threat Intel Commands](#-interactive-threat-intel-commands)
 - [3D Interactive Cyber Threat Globe & Radar](#-3d-interactive-cyber-threat-globe--radar)
-- [1-Click Cloud Connect (`connect-gcp.bat`)](#-1-click-cloud-connect)
 - [RAG & Conversational AI (`/ask`)](#-rag--conversational-ai-ask-your-news)
 - [Deep Threat Intelligence](#-deep-threat-intelligence)
 - [Bot Commands Reference](#-bot-commands)
@@ -116,17 +115,6 @@ npm install
 cp .env.example .env
 npm start
 ```
-
----
-
-## ⚡ 1-Click Cloud Connect (`connect-gcp.bat`)
-
-Connect directly to your GCP Compute Engine VM (`newsfeedrvm`) from Windows in **1 double-click**:
-
-* **Double-click `connect-gcp.bat`** in File Explorer.
-* Automatically uses Google Cloud key management, resolves zone (`us-east1-c`), and handles dynamic/ephemeral IP rotations automatically.
-* You can right-click `connect-gcp.bat` → **Send to Desktop (create shortcut)** for instant access anytime.
-
 ---
 
 ## 🧪 AI Summarizer & Live Diagnostics (`npm run test-ai`)
