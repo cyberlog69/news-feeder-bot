@@ -5,6 +5,9 @@ on:
     branches: [ master, main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Auto Deploy to GCP Compute Engine
@@ -58,7 +61,7 @@ jobs:
 
           echo "🚀 Connecting to $SSH_USER@$SSH_HOST..."
 
-          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=25 "$SSH_USER@$SSH_HOST" bash -s << 'EOF'
+          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$SSH_USER@$SSH_HOST" bash -s << 'EOF'
             set -e
 
             # Locate news-feeder-bot directory

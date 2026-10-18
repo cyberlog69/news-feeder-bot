@@ -1215,6 +1215,10 @@ function startDashboard(pipeline, port = 3000, startTime = Date.now(), onTrigger
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'DENY',
         'Referrer-Policy': 'no-referrer',
+        'Permissions-Policy': 'geolocation=(), camera=(), microphone=(), payment=()',
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        ...(IS_PROD ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {}),
         ...extra
       };
     }
