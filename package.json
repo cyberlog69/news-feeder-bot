@@ -45,7 +45,7 @@
     "bot"
   ],
   "dependencies": {
-    "@extractus/article-extractor": "^8.0.0",
+    "@extractus/article-extractor": "^9.0.1",
     "@google/generative-ai": "^0.24.1",
     "dotenv": "^18.0.8",
     "node-cron": "^4.6.0",
