@@ -333,7 +333,6 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
 
         <span style="flex:1"></span>
         <input id="eiSearchInput" class="search-input" style="min-width:160px;" placeholder="Filter by IP, country, service…" oninput="filterExposedIps(this.value)">
-        <button class="btn" onclick="seedSampleIps()" title="Load sample exposed IPs">🧪 Sample IPs</button>
         <button class="btn" onclick="triggerIpScan()" title="Trigger a fresh scan now">⟳ Refresh Scan</button>
         <button class="btn" onclick="printExposedIpsPdf()" title="Print or save report as PDF" style="border-color:var(--blue);color:var(--blue);font-weight:600;">🖨️ Print / PDF</button>
         <button class="btn" onclick="exportExposedIpsDoc()" title="Export report as Word Document (.doc)" style="border-color:var(--green);color:var(--green);font-weight:600;">📄 Export DOC</button>
@@ -904,7 +903,7 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
 
       if (!rows || rows.length === 0) {
         document.getElementById('exposedIpBox').innerHTML =
-          '<div class="log-info">No exposed IP records found' + (q ? ' matching "' + esc(q) + '"' : '') + '. Select another month or click 🧪 Sample IPs / ⟳ Refresh Scan.</div>';
+          '<div class="log-info">No exposed IP records found' + (q ? ' matching "' + esc(q) + '"' : '') + '. Select another month or click ⟳ Refresh Scan.</div>';
         return;
       }
 
@@ -1039,20 +1038,7 @@ function buildHtml(stats, recentArticles, logLines, startTime) {
         renderExposedIpTable(__exposedIpData);
       } catch (e) {
         document.getElementById('exposedIpBox').innerHTML =
-          '<div class="log-info">No scan data yet. Click 🧪 Sample IPs to load initial data.</div>';
-      }
-    }
-
-    async function seedSampleIps() {
-      var box = document.getElementById('exposedIpBox');
-      box.innerHTML = '<div class="log-info">⏳ Loading sample exposed IP intelligence…</div>';
-      try {
-        var res = await fetch('/api/exposed-ips/seed', { method: 'POST' });
-        var data = await res.json();
-        box.innerHTML = '<div class="log-success">✅ Sample IPs loaded (' + (data.seeded || data.total || 0) + ' records).</div>';
-        setTimeout(function() { loadExposedIps(__exposedIpTab); }, 800);
-      } catch (e) {
-        box.innerHTML = '<div class="log-error">❌ Failed to seed sample IPs: ' + esc(e.message) + '</div>';
+          '<div class="log-info">No scan data yet. Click ⟳ Refresh Scan to run an IP scan.</div>';
       }
     }
 
