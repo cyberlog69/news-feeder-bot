@@ -6,7 +6,7 @@ const WebhookSender = require('../src/webhook-sender');
 
 test('EmailSender - builds responsive HTML email template with threat intel', () => {
   const sender = new EmailSender({ toEmail: 'test@example.com' });
-  const article = { title: 'CVE-2024-30078 RCE Fixed', source: 'Security News', category: 'Cyber', url: 'https://example.com' };
+  const article = { title: 'CVE-2024-30078 RCE Fixed', source: 'Security News', category: 'Cyber', url: 'https://example.com/advisories/cve-2024-30078' };
   const summary = '• Critical RCE vulnerability patched.\n• Immediate update required.';
   const threatIntel = { cves: [{ cveId: 'CVE-2024-30078', cvss: 9.8 }] };
 
@@ -15,7 +15,7 @@ test('EmailSender - builds responsive HTML email template with threat intel', ()
   assert.ok(html.includes('CVE-2024-30078 RCE Fixed'));
   assert.ok(html.includes('Critical RCE vulnerability patched'));
   assert.ok(html.includes('CVSS 9.8'));
-  assert.ok(html.includes('https://example.com'));
+  assert.ok(html.includes(`href="${article.url}"`));
 });
 
 test('PushSender - initializes with Ntfy configuration', async () => {
@@ -29,7 +29,7 @@ test('PushSender - safely processes unicode smart quotes and emojis', async () =
   await sender.initialize();
   // Character 8217 is ’ (smart quote)
   await assert.doesNotReject(async () => {
-    await sender.sendPush("Microsoft’s Latest Zero-Day Patch — Exploit Detected", "• Patch is available immediately.", "https://example.com", true);
+    await sender.sendPush("Microsoft’s Latest Zero-Day Patch — Exploit Detected", "• Patch is available immediately.", "https://example.com/ms-zero-day", true);
   });
 });
 
