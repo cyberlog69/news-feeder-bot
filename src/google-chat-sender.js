@@ -81,10 +81,10 @@ class GoogleChatSender {
   async sendMessage(message) {
     const text = message
       .replace(/<[^>]{0,500}>/g, '')
-      .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"');
+      .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&');
 
     await this._postWithRetry({ text });
   }
