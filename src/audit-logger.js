@@ -27,7 +27,7 @@ function formatCefEvent(event) {
 
   const type = event.type || 'SECURITY_ALERT';
   const name = String(event.name || 'Security Event').replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
-  const details = String(event.details || '').replace(/=/g, '\\=');
+  const details = String(event.details || '').replace(/\\/g, '\\\\').replace(/=/g, '\\=');
   const actor = event.actor || 'system';
 
   return `CEF:0|NewsFeederBot|SOCEngine|3.14.0|${type}|${name}|${sevNum}|src=${event.ip || '127.0.0.1'} suser=${actor} msg=${details} rt=${Date.now()}`;
