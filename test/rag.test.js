@@ -40,5 +40,20 @@ test('handleCommand - /ask returns RAG answer citing indexed articles', async ()
 
   assert.ok(response);
   assert.ok(response.includes('Healthcare Provider Hit by Ransomware Attack') || response.includes('RAG'));
-  assert.ok(response.includes('https://example.com/ransomware-breach-2026'));
+
+  const urlCandidates = response.match(/https?:\/\/[^\s)]+/g) || [];
+  const hasExpectedArticleUrl = urlCandidates.some((candidate) => {
+    try {
+      const parsed = new URL(candidate);
+      return (
+        parsed.protocol === 'https:' &&
+        parsed.hostname === 'example.com' &&
+        parsed.pathname === '/ransomware-breach-2026'
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  assert.ok(hasExpectedArticleUrl);
 });
