@@ -113,13 +113,13 @@ async function runDiagnostic() {
 
   console.log(`📌 Primary Configured Provider: ${provider.toUpperCase()}`);
   console.log('───────────────────────────────────────────────────────────');
-  console.log(`🥇 GROQ_API_KEY:         ${groqKey ? '✔ Configured (' + groqKey.slice(0, 8) + '…)' : '❌ Not set'}`);
-  console.log(`🥈 GEMINI_API_KEY:       ${geminiKey ? '✔ Configured (' + geminiKey.slice(0, 8) + '…)' : '❌ Not set'}`);
-  console.log(`🥉 CEREBRAS_API_KEY:     ${cerebrasKey ? '✔ Configured (' + cerebrasKey.slice(0, 8) + '…)' : '❌ Not set'}`);
-  console.log(`4️⃣ MISTRAL_API_KEY:      ${mistralKey ? '✔ Configured (' + mistralKey.slice(0, 8) + '…)' : '❌ Not set'}`);
-  console.log(`5️⃣ COHERE_API_KEY:       ${cohereKey ? '✔ Configured (' + cohereKey.slice(0, 8) + '…)' : '❌ Not set'}`);
-  console.log(`6️⃣ CLOUDFLARE_API_TOKEN: ${cloudflareToken ? '✔ Configured (' + cloudflareToken.slice(0, 8) + '…)' : '❌ Not set'}`);
-  console.log(`🌐 OPENROUTER_API_KEY:   ${openrouterKey ? '✔ Configured (' + openrouterKey.slice(0, 8) + '…)' : '❌ Not set'}`);
+  console.log(`🥇 GROQ_API_KEY:         ${groqKey ? '✔ Configured' : '❌ Not set'}`);
+  console.log(`🥈 GEMINI_API_KEY:       ${geminiKey ? '✔ Configured' : '❌ Not set'}`);
+  console.log(`🥉 CEREBRAS_API_KEY:     ${cerebrasKey ? '✔ Configured' : '❌ Not set'}`);
+  console.log(`4️⃣ MISTRAL_API_KEY:      ${mistralKey ? '✔ Configured' : '❌ Not set'}`);
+  console.log(`5️⃣ COHERE_API_KEY:       ${cohereKey ? '✔ Configured' : '❌ Not set'}`);
+  console.log(`6️⃣ CLOUDFLARE_API_TOKEN: ${cloudflareToken ? '✔ Configured' : '❌ Not set'}`);
+  console.log(`🌐 OPENROUTER_API_KEY:   ${openrouterKey ? '✔ Configured' : '❌ Not set'}`);
   console.log('───────────────────────────────────────────────────────────');
 
   if (groqKey) await testGroqModelsEndpoint(groqKey);
