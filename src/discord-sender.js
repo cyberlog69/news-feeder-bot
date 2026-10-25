@@ -102,10 +102,10 @@ class DiscordSender {
     // Discord uses plain text with some markdown — strip Telegram HTML tags
     const text = message
       .replace(/<[^>]{0,500}>/g, '')          // strip HTML
-      .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&')
       .slice(0, DISCORD_MAX_LENGTH);
 
     const body = { content: text, username: this.username };
