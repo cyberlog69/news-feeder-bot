@@ -26,7 +26,7 @@ function formatCefEvent(event) {
   const sevNum = severityMap[String(event.severity || 'low').toLowerCase()] || 3;
 
   const type = event.type || 'SECURITY_ALERT';
-  const name = String(event.name || 'Security Event').replace(/\|/g, '\\|');
+  const name = String(event.name || 'Security Event').replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
   const details = String(event.details || '').replace(/=/g, '\\=');
   const actor = event.actor || 'system';
 
