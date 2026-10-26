@@ -19,7 +19,21 @@ test('Social Broadcaster - formats character-capped posts with hashtags and link
   assert.ok(post.includes('CVE-2024-9999') || post.includes('Zero-day'));
   assert.ok(post.includes('#CyberSecurity'));
   assert.ok(post.includes('#Ransomware'));
-  assert.ok(post.includes('https://securityweek.com/vpn-0day'));
+
+  const urlCandidates = post.match(/https?:\/\/[^\s]+/g) || [];
+  const hasExpectedArticleUrl = urlCandidates.some((candidate) => {
+    try {
+      const parsed = new URL(candidate);
+      return (
+        parsed.protocol === 'https:' &&
+        parsed.hostname === 'securityweek.com' &&
+        parsed.pathname === '/vpn-0day'
+      );
+    } catch {
+      return false;
+    }
+  });
+  assert.ok(hasExpectedArticleUrl);
   assert.ok(post.length <= 300);
 });
 
