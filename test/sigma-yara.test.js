@@ -24,7 +24,7 @@ test('Sigma & YARA Generator - creates valid Sigma YAML rule from threat intel',
   assert.ok(yaml.includes('status: experimental'));
   assert.ok(yaml.includes('logsource:'));
   assert.ok(yaml.includes('198.51.100.25'));
-  assert.ok(yaml.includes('malicious-c2.example.com'));
+  assert.match(yaml, /DestinationHostname:\s+- 'malicious-c2\.example\.com'/);
   assert.ok(yaml.includes('attack.t1190'));
   assert.ok(yaml.includes('cve.cve-2024-30078'));
 });
