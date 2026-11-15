@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📰 News Feeder Bot v3.17.0
+# 📰 News Feeder Bot v3.18.0
 
 ### Autonomous Cybersecurity & Tech Intelligence Platform — Delivered Across 9 Platforms
 #### Threat Intel (CVE/EPSS/IOC/MITRE) · Sigma/YARA & Sentinel KQL · STIX/TAXII 2.1 · TTS Cyber Podcast · 3D Threat Globe · 0 Audit Vulnerabilities
@@ -17,7 +17,7 @@
 
 ## 📌 Table of Contents
 
-- [What's New in v3.17.0](#-whats-new-in-v3170)
+- [What's New in v3.18.0](#-whats-new-in-v3180)
 - [Features](#-features)
 - [Supported Delivery Channels](#-supported-delivery-channels)
 - [Quick Start](#-quick-start)
@@ -39,15 +39,16 @@
 
 ---
 
-## 🆕 What's New in v3.17.0
+## 🆕 What's New in v3.18.0
 
 | Module | Details |
 |---|---|
-| 🛡️ **SIEM/SOAR Rule Transpiler & Push API** | Automatically transpiles Sigma rules into **Microsoft Sentinel KQL**, **Splunk SPL**, and **Elastic Detection Queries**. Includes rule syntax validation and automated push APIs (`/api/siem/rules`, `/api/siem/push`). |
-| 📡 **STIX 2.1 & TAXII 2.1 Threat Sharing** | Full **TAXII 2.1 Server** (`/taxii2/`, `/taxii2/root/`, `/taxii2/root/collections/`) serving STIX 2.1 indicator bundles, and structured **MISP Event** exports (`/api/misp/events`, `/api/stix/bundle`). |
-| 🎙️ **TTS Podcast Audio** | Compiles a daily briefing and attempts chunked TTS synthesis into `/api/podcast/audio/<episode>`; `/podcast.xml` includes an enclosure only when real audio exists (no silent placeholder files). |
-| ⚖️ **Granular Source Reputation & Breaker Bonus** | Per-source credibility weighting in `config.json` with dynamic **Breaker Bonus** (+0.10) for in-the-wild zero-days and emergency patches (`/api/sources/reputation`). |
-| 🧪 **109/109 Passing Unit Tests** | Automated tests (`npm test`) cover SIEM push, STIX/TAXII, audio synthesis, reputation scoring, RBAC, SSRF guards, and dashboard/pipeline integration. CI now runs the suite before deploy. |
+| 🔐 **Dashboard Login & RBAC** | Token login issues a short-lived HMAC-signed `HttpOnly`, `SameSite=Strict` cookie. `/` and every `/api/*` route are protected in production (public exceptions: podcast, STIX/MISP, syndication feeds, TAXII, `/health`). Admin/analyst/auditor roles are enforced. |
+| 🧩 **Modular Dashboard** | Templates, auth, HTTP helpers, sessions, and six route groups were extracted. `src/web-dashboard.js` dropped from ~2,360 lines to ~416 lines. |
+| 💾 **Persistent Runtime State** | The digest buffer and Telegram `getUpdates` offset are stored in SQLite, so restarts no longer lose buffered digests or replay old commands. |
+| 🛡️ **SSRF Hardening** | RSS **and** full-text article fetches follow redirects manually and re-validate every hop. Article HTML is fetched safely and passed to `extractFromHtml()`, so the extractor performs no network I/O. |
+| 🎙️ **Pluggable TTS** | `TTS_PROVIDER=google\|openai\|elevenlabs\|none`. Audio is generated only when real speech synthesis succeeds; otherwise the podcast/voice note is explicitly text-only. |
+| 🧪 **109/109 Passing Unit Tests** | Offline-by-default test suite covering login/session, RBAC, SSRF, persistence, commands, subscriptions, SIEM/STIX, podcast handling, and dashboard routes. CI runs it before deploy. |
 
 ---
 

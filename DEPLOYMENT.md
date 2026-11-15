@@ -1,4 +1,4 @@
-# 🚀 Multi-Cloud Deployment Guide — News Feeder Bot v3.17.0
+# 🚀 Multi-Cloud Deployment Guide — News Feeder Bot v3.18.0
 
 This guide provides step-by-step instructions for deploying **News Feeder Bot** across all major free, low-cost, and enterprise cloud hosting platforms.
 

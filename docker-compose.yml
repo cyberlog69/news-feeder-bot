@@ -1,4 +1,4 @@
-# docker-compose.yml — News Feeder Bot v3.17.0
+# docker-compose.yml — News Feeder Bot v3.18.0
 #
 # Usage (Docker):
 #   docker compose up -d          # start in background
