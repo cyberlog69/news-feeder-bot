@@ -2,7 +2,7 @@ name: 🚀 Auto-Deploy to GCP VM
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -76,7 +76,9 @@ jobs:
             echo "📦 Pulling latest changes from GitHub..."
             # Safely stash any local modifications (e.g. config.json altered via Web Dashboard)
             git stash --include-untracked 2>/dev/null || true
-            git pull origin master
+            git remote set-head origin -a 2>/dev/null || true
+            git checkout main 2>/dev/null || git checkout -b main origin/main 2>/dev/null || true
+            git pull origin main
             git stash pop 2>/dev/null || true
 
             # Check whether Podman (via systemd), podman-compose, or Docker is active

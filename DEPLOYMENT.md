@@ -183,7 +183,7 @@ sudo systemctl enable --now container-news-feeder-bot.service
 ```
 
 ### Automated Continuous Deployment (Vercel-style Auto-Deploy)
-To auto-deploy on every `git push origin master`:
+To auto-deploy on every `git push origin main`:
 1. Generate an SSH key on your VM: `ssh-keygen -t ed25519 -f ~/.ssh/github_deploy -N "" -q <<< y`
 2. Add public key: `cat ~/.ssh/github_deploy.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`
 3. Print base64 key: `base64 -w 0 ~/.ssh/github_deploy`
