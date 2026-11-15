@@ -7,7 +7,8 @@ const path = require('path');
 const crypto = require('crypto');
 const logger = require('./logger');
 
-const CARD_DIR = path.join(process.cwd(), 'data', 'cards');
+const { DATA_DIR } = require('./paths');
+const CARD_DIR = path.join(DATA_DIR, 'cards');
 
 function ensureCardDir() {
   if (!fs.existsSync(CARD_DIR)) {

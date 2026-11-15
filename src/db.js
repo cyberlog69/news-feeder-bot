@@ -5,11 +5,16 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
+const { DATA_DIR } = require('./paths');
 
-const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DATA_DIR, 'newsbot.sqlite');
 
 let db = null;
+
+/** Demo/sample data is only allowed when explicitly requested. */
+function isDemoMode() {
+  return String(process.env.DEMO_MODE || '').toLowerCase() === 'true';
+}
 
 function initDb() {
   if (db) return db;
@@ -120,6 +125,12 @@ function initDb() {
         created_at TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS runtime_state (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS podcast_episodes (
         episode_id TEXT PRIMARY KEY,
         title TEXT,
@@ -170,14 +181,17 @@ function initDb() {
     // Migrate legacy JSON files if they exist
     migrateLegacyJson(db);
 
-    // Auto-seed sample exposed IPs if table is currently empty
-    try {
-      seedSampleExposedIps(db);
-    } catch {
-      // Non-fatal if module loading during migration
+    // Demo data is opt-in only. Auto-seeding realistic-looking IPs into a
+    // production database would present fabricated intelligence as real.
+    if (isDemoMode()) {
+      try {
+        seedSampleExposedIps(db);
+      } catch {
+        // Non-fatal if module loading during migration
+      }
     }
 
-    logger.info(`SQLite database initialized at: data/newsbot.sqlite`);
+    logger.info(`SQLite database initialized at: ${DB_PATH}`);
     return db;
   } catch (err) {
     logger.error(`SQLite database init failed: ${err.message}`);
@@ -685,6 +699,30 @@ function removeWatchlistKeyword(keyword) {
   stmt.run(String(keyword).toLowerCase().trim());
 }
 
+// ── Runtime State (survives restarts) ─────────────────────────────────────────
+
+function getRuntimeState(key) {
+  if (!key) return null;
+  const database = initDb();
+  const row = database.prepare('SELECT value FROM runtime_state WHERE key = ?').get(String(key));
+  return row ? row.value : null;
+}
+
+function setRuntimeState(key, value) {
+  if (!key) return;
+  const database = initDb();
+  database.prepare(`
+    INSERT OR REPLACE INTO runtime_state (key, value, updated_at)
+    VALUES (?, ?, ?)
+  `).run(String(key), String(value ?? ''), new Date().toISOString());
+}
+
+function deleteRuntimeState(key) {
+  if (!key) return;
+  const database = initDb();
+  database.prepare('DELETE FROM runtime_state WHERE key = ?').run(String(key));
+}
+
 // ── Podcast Episodes Storage API ──────────────────────────────────────────────
 
 function savePodcastEpisode(episodeId, title, audioUrl, script, duration = '2m') {
@@ -758,6 +796,8 @@ function parseExposedIpRow(row) {
  * @returns {number} count of seeded records
  */
 function seedSampleExposedIps(database = null) {
+  if (!isDemoMode()) return 0;
+
   const db = database || initDb();
   try {
     const count = db.prepare('SELECT COUNT(*) as c FROM exposed_ips').get()?.c || 0;
@@ -830,7 +870,7 @@ function seedSampleExposedIps(database = null) {
  * @param {string|object} [filterOptions=null] - ISO-2 string (e.g. 'IN') OR { countryCode, month, sortBy }
  * @returns {object[]}
  */
-function getExposedIps(limit = 100, filterOptions = null) {
+function getExposedIps(limit = 100, filterOptions = null, _retried = false) {
   const database = initDb();
   const opts = typeof filterOptions === 'string'
     ? { countryCode: filterOptions }
@@ -882,12 +922,13 @@ function getExposedIps(limit = 100, filterOptions = null) {
     `SELECT * FROM exposed_ips ${whereSql} ${orderSql} LIMIT ?`
   ).all(...params, limit);
 
-  // If table is completely empty, auto-seed and query again
+  // If the table is completely empty and demo mode is on, seed once and retry.
+  // The retry flag prevents unbounded recursion if seeding fails.
   if (!rows || rows.length === 0) {
     const total = database.prepare('SELECT COUNT(*) as c FROM exposed_ips').get()?.c || 0;
-    if (total === 0) {
+    if (total === 0 && !_retried && isDemoMode()) {
       seedSampleExposedIps(database);
-      return getExposedIps(limit, filterOptions);
+      return getExposedIps(limit, filterOptions, true);
     }
   }
 
@@ -986,5 +1027,9 @@ module.exports = {
   getExposedIps,
   getExposedIpStats,
   seedSampleExposedIps,
-  pruneExposedIps
+  pruneExposedIps,
+  isDemoMode,
+  getRuntimeState,
+  setRuntimeState,
+  deleteRuntimeState
 };

@@ -38,7 +38,7 @@ async function checkExploitPoC(cveId) {
         const source = `GitHub (${item.full_name})`;
 
         setCvePoc(normalizedCve, pocUrl, source);
-        logger.info(`[PoC Radar] 🔥 Discovered verified Exploit PoC for ${normalizedCve}: ${pocUrl}`);
+        logger.info(`[PoC Radar] 🔥 Discovered public exploit repository candidate for ${normalizedCve}: ${pocUrl}`);
 
         return { hasPoc: true, pocUrl, source, cached: false };
       }

@@ -1,4 +1,4 @@
-// index.js — Main entry point v3.14.0
+// index.js — Main entry point (version comes from package.json)
 // Boots multi-platform news delivery (WhatsApp, Telegram, Discord, Slack, Teams, Google Chat, Email, Push, Webhooks)
 // and starts the SOC Web Dashboard + REST APIs on port 3000 immediately.
 
@@ -30,14 +30,17 @@ const { startDashboard } = require('./src/web-dashboard');
 const { validateEnv }    = require('./src/env-validator');
 const { syncThreatData, runRansomwareTracking } = require('./src/threat-ops');
 const { runDailyScan: runExposedIpScan } = require('./src/exposed-ip-scanner');
+const { handleCommand }  = require('./src/command-handler');
 const logger             = require('./src/logger');
+const { mask }           = require('./src/redact');
+const pkg                = require('./package.json');
 
 const BOT_START_TIME = Date.now();
 
 // ── Banner ────────────────────────────────────────────────────────────────────
 console.log('\n');
 console.log('╔══════════════════════════════════════════════════╗');
-console.log('║   📰  News Feeder Bot  v3.14.0                   ║');
+console.log(`║   📰  News Feeder Bot  v${pkg.version.padEnd(24)}║`);
 console.log('║   Autonomous Threat Intelligence Platform        ║');
 console.log('╚══════════════════════════════════════════════════╝\n');
 
@@ -65,9 +68,76 @@ enabledSources.forEach((s) => logger.info(`  • ${s.name}  (${s.rss})`));
 // ── AI Summarizer ─────────────────────────────────────────────────────────────
 initSummarizer();
 
+// ── Scheduler helpers ─────────────────────────────────────────────────────────
+const clampInt = (value, min, max, fallback) => {
+  const n = parseInt(value, 10);
+  if (isNaN(n)) return fallback;
+  return Math.min(Math.max(n, min), max);
+};
+
+/** Re-read config.json for hot-reloadable schedule settings. */
+function readLiveConfig(configPath, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  } catch {
+    return fallback;
+  }
+}
+
+/** Return { dateKey, hour, minute } in the requested IANA timezone. */
+function getTimeParts(date, timeZone) {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    });
+    const parts = Object.fromEntries(fmt.formatToParts(date).map((p) => [p.type, p.value]));
+    return {
+      dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+      hour: parseInt(parts.hour, 10),
+      minute: parseInt(parts.minute, 10)
+    };
+  } catch {
+    // Invalid timezone — fall back to the server clock.
+    return {
+      dateKey: date.toISOString().slice(0, 10),
+      hour: date.getHours(),
+      minute: date.getMinutes()
+    };
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   const senders = [];
+  const telegramPollersStarted = new Set();
+
+  // ── Interactive command dispatcher ────────────────────────────────────────
+  // Only the configured target chat(s) are allowed to issue commands. When
+  // COMMAND_ADMIN_USERS is set, cost/mutation-heavy commands require a match.
+  const commandAdminIds = (process.env.COMMAND_ADMIN_USERS || '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  function isAdminUser(id) {
+    if (commandAdminIds.length === 0) return true; // trusted target chat
+    return commandAdminIds.includes(String(id || ''));
+  }
+
+  const dispatchCommand = async ({ text, targetId, userId, platform }) => {
+    return handleCommand(text, pipeline.config || config, BOT_START_TIME, {
+      targetId,
+      userId,
+      platform,
+      isAdmin: isAdminUser(userId || targetId)
+    });
+  };
 
   // ── 1. Pipeline & Early Dashboard Startup ──────────────────────────────────
   // Starts web dashboard & health check on port 3000 immediately so container/cloud healthchecks succeed instantly
@@ -82,7 +152,7 @@ async function main() {
 
   if (TG_TOKEN && TG_TARGETS.length > 0) {
     for (const target of TG_TARGETS) {
-      logger.info(`Initializing Telegram → ${target}`);
+      logger.info(`Initializing Telegram → ${mask(target)}`);
       try {
         const tgSender = new TelegramSender(TG_TOKEN, target);
         await tgSender.initialize();
@@ -90,13 +160,22 @@ async function main() {
           await tgSender.sendMessage(
             formatStartupMessageForTelegram(enabledSources.map((s) => s.name), config.settings.pollIntervalMinutes)
           );
-          logger.success(`Telegram startup notification sent → ${target}`);
+          logger.success(`Telegram startup notification sent → ${mask(target)}`);
         } catch (err) {
           logger.warn(`Telegram startup notification failed: ${err.message}`);
         }
-        senders.push({ name: `Telegram(${target})`, sender: tgSender, type: 'telegram' });
+        senders.push({ name: `Telegram(${mask(target)})`, sender: tgSender, type: 'telegram' });
+
+        // One long-poll loop per bot token; it accepts commands from any of
+        // the configured TELEGRAM_TARGET chats.
+        if (!telegramPollersStarted.has(TG_TOKEN)) {
+          telegramPollersStarted.add(TG_TOKEN);
+          tgSender.startCommandPolling(dispatchCommand, { allowedChats: TG_TARGETS }).catch((err) => {
+            logger.warn(`Telegram command polling failed: ${err.message.split('\n')[0]}`);
+          });
+        }
       } catch (err) {
-        logger.error(`Telegram init failed for "${target}": ${err.message.split('\n')[0]}`);
+        logger.error(`Telegram init failed for "${mask(target)}": ${err.message.split('\n')[0]}`);
       }
     }
   }
@@ -180,7 +259,7 @@ async function main() {
     try {
       const webhookSender = new WebhookSender();
       await webhookSender.initialize();
-      senders.push({ name: 'Outbound Webhook', sender: webhookSender, type: 'webhook' });
+      senders.push({ name: 'Outbound Webhook', sender: webhookSender, type: 'outbound-webhook' });
     } catch (err) {
       logger.error(`Webhook init failed: ${err.message.split('\n')[0]}`);
     }
@@ -192,9 +271,10 @@ async function main() {
 
   if (WA_TARGETS.length > 0) {
     for (const target of WA_TARGETS) {
-      logger.info(`Initializing WhatsApp → ${target}`);
+      logger.info(`Initializing WhatsApp → ${mask(target)}`);
       try {
         const waSender = new WhatsAppSender(target);
+        waSender.onCommand(dispatchCommand);
         await waSender.initialize();
         
         // Wait for ready asynchronously so other features and dashboard run immediately
@@ -203,16 +283,16 @@ async function main() {
             await waSender.sendMessage(
               formatStartupMessage(enabledSources.map((s) => s.name), config.settings.pollIntervalMinutes)
             );
-            logger.success(`WhatsApp startup notification sent → ${target}`);
+            logger.success(`WhatsApp startup notification sent → ${mask(target)}`);
           } catch (err) {
             logger.warn(`WhatsApp startup notification failed: ${err.message}`);
           }
-          senders.push({ name: `WhatsApp(${target.slice(0, 20)})`, sender: waSender, type: 'whatsapp' });
+          senders.push({ name: `WhatsApp(${mask(target, 3)})`, sender: waSender, type: 'whatsapp' });
         }).catch((err) => {
           logger.warn(`WhatsApp auth error: ${err.message}`);
         });
       } catch (err) {
-        logger.error(`WhatsApp init failed for "${target}": ${err.message.split('\n')[0]}`);
+        logger.error(`WhatsApp init failed for "${mask(target)}": ${err.message.split('\n')[0]}`);
       }
     }
   }
@@ -226,30 +306,50 @@ async function main() {
   logger.info('Running initial pipeline pass...');
   await pipeline.run();
 
-  // ── Recurring pipeline cron ───────────────────────────────────────────────
-  const interval = config.settings.pollIntervalMinutes || 5;
-  cron.schedule(`*/${interval} * * * *`, async () => {
-    await pipeline.run().catch((err) => {
-      logger.error(`Unhandled pipeline error: ${err.message}`);
-    });
-  });
+  // ── Heartbeat: pipeline polling + daily digest (both hot-reloadable) ─────
+  // A one-minute tick is used instead of `*/N` crons so changing
+  // pollIntervalMinutes / digest settings in config.json takes effect without
+  // a restart, and so intervals above 59 minutes remain expressible.
+  let lastPipelineRun = Date.now();
+  let lastDigestDateKey = null;
 
-  // ── Daily digest cron ─────────────────────────────────────────────────────
-  const digest = config.digest || {};
-  if (digest.enabled && digest.sendAt) {
+  cron.schedule('* * * * *', async () => {
+    const live = readLiveConfig(configPath, config);
+
+    const interval = clampInt(live.settings?.pollIntervalMinutes, 1, 1440, 5);
+    if (Date.now() - lastPipelineRun >= interval * 60 * 1000) {
+      lastPipelineRun = Date.now();
+      await pipeline.run().catch((err) => {
+        logger.error(`Unhandled pipeline error: ${err.message.split('\n')[0]}`);
+      });
+    }
+
+    const digest = live.digest || {};
+    if (!digest.enabled || !digest.sendAt) return;
+
     const [hourStr, minStr] = String(digest.sendAt).split(':');
     const hour = parseInt(hourStr, 10);
     const min  = parseInt(minStr,  10);
-    if (!isNaN(hour) && !isNaN(min)) {
-      cron.schedule(`${min} ${hour} * * *`, async () => {
-        logger.info('Sending daily digest...');
-        await pipeline.sendDigest(formatDigest, formatDigestForTelegram).catch((err) => {
-          logger.error(`Digest error: ${err.message}`);
-        });
+    if (isNaN(hour) || isNaN(min) || hour < 0 || hour > 23 || min < 0 || min > 59) return;
+
+    const timeZone = digest.timezone || 'UTC';
+    const now = getTimeParts(new Date(), timeZone);
+    const nowMinutes = now.hour * 60 + now.minute;
+    const targetMinutes = hour * 60 + min;
+    // 10-minute grace window: survives a restart or a skipped heartbeat.
+    if (nowMinutes >= targetMinutes && nowMinutes < targetMinutes + 10 && lastDigestDateKey !== now.dateKey) {
+      lastDigestDateKey = now.dateKey;
+      logger.info(`Sending daily digest for ${now.dateKey} (${timeZone})...`);
+      await pipeline.sendDigest(formatDigest, formatDigestForTelegram).catch((err) => {
+        logger.error(`Digest error: ${err.message.split('\n')[0]}`);
       });
-      logger.info(`Daily digest scheduled at ${digest.sendAt}`);
     }
-  }
+  });
+
+  logger.info(
+    `Scheduler heartbeat started — pipeline every ${clampInt(config.settings?.pollIntervalMinutes, 1, 1440, 5)} min, ` +
+    `digest ${config.digest?.enabled ? `daily at ${config.digest.sendAt} (${config.digest.timezone || 'UTC'})` : 'disabled'}`
+  );
 
   // ── Health check cron (daily at configured hour) ──────────────────────────
   const healthHour = parseInt(config.settings?.healthCheckHour, 10);
@@ -278,9 +378,9 @@ async function main() {
     const { createDatabaseBackup, optimizeDatabase, pruneOldRecords, cleanupGeneratedMedia } = require('./src/db-maintenance');
     cron.schedule(`0 ${maintenanceHour} * * *`, async () => {
       logger.info('Running daily database maintenance...');
-      pruneOldRecords(config.settings?.backupRetentionDays || 90);
+      pruneOldRecords(config.settings?.recordRetentionDays || config.settings?.backupRetentionDays || 90);
       cleanupGeneratedMedia(30);
-      const backupPath = createDatabaseBackup();
+      const backupPath = createDatabaseBackup(clampInt(config.settings?.backupRetentionCount, 1, 90, 7));
       const optimized = optimizeDatabase();
       logger.info(`Maintenance complete — backup: ${backupPath || 'none'}, optimization: ${JSON.stringify(optimized)}`);
     });
@@ -349,8 +449,18 @@ function shutdown() {
 
 process.on('SIGINT',  shutdown);
 process.on('SIGTERM', shutdown);
-process.on('uncaughtException',  (err) => logger.error(`Uncaught: ${err.message.split('\n')[0]}`));
-process.on('unhandledRejection', (r)   => logger.error(`Unhandled rejection: ${r?.message || String(r).split('\n')[0]}`));
+
+// An unknown exception leaves the process in an undefined state. Log it and
+// exit so the supervisor (Docker/PM2/systemd) can restart cleanly.
+process.on('uncaughtException', (err) => {
+  logger.error(`Uncaught exception: ${err?.message || String(err)}`);
+  if (err?.stack) logger.error(err.stack.split('\n').slice(0, 5).join(' | '));
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (r) => {
+  logger.error(`Unhandled rejection: ${r?.message || String(r).split('\n')[0]}`);
+});
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 main().catch((err) => {

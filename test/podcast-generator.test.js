@@ -1,3 +1,4 @@
+require('./setup');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { generatePodcastScript, generatePodcastRssXml, getPodcastXsl, compileDailyPodcast } = require('../src/podcast-generator');
@@ -17,8 +18,8 @@ test('Podcast Generator - generates broadcast daily cyber news podcast script', 
   assert.ok(podcast.script.includes('Tactical takeaway for security teams'));
 });
 
-test('Podcast Generator - creates valid Apple/Spotify RSS 2.0 podcast XML feed with XSL stylesheet', () => {
-  compileDailyPodcast([
+test('Podcast Generator - creates valid Apple/Spotify RSS 2.0 podcast XML feed with XSL stylesheet', async () => {
+  await compileDailyPodcast([
     { title: 'Ransomware Gang Leaks Stolen Corporate Data', url: 'https://example.com/leak' }
   ]);
 
@@ -27,7 +28,11 @@ test('Podcast Generator - creates valid Apple/Spotify RSS 2.0 podcast XML feed w
   assert.ok(xml.includes('<rss version="2.0"'));
   assert.ok(xml.includes('<title>Daily Cyber Threat Briefing</title>'));
   assert.ok(xml.includes('xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"'));
-  assert.ok(xml.includes('<enclosure url="http://localhost:3000/api/podcast/audio"'));
+  // Never fabricate a silent placeholder enclosure: if TTS succeeded, the
+  // enclosure must point at the episode-specific audio route.
+  if (xml.includes('<enclosure')) {
+    assert.ok(xml.includes('/api/podcast/audio/ep-'));
+  }
   assert.ok(xml.includes('xml-stylesheet type="text/xsl" href="http://localhost:3000/podcast.xsl"'));
 
   const xsl = getPodcastXsl();

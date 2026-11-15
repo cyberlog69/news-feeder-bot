@@ -13,6 +13,8 @@ primary_region = "sin"         # Singapore (closest to India)
 [env]
   NODE_ENV = "production"
   PORT = "3000"
+  # Persist the WhatsApp session on the persistent volume so the bot stays logged in across restarts
+  WWEBJS_AUTH_PATH = "/app/data/.wwebjs_auth"
 
 [http_service]
   internal_port = 3000
@@ -26,30 +28,23 @@ primary_region = "sin"         # Singapore (closest to India)
     hard_limit = 10
     soft_limit = 5
 
+  [[http_service.checks]]
+    interval     = "30s"
+    timeout      = "5s"
+    grace_period = "60s"
+    method       = "GET"
+    path         = "/health"
+
 [[vm]]
   memory = "512mb"              # 256mb minimum, 512mb recommended for puppeteer
   cpu_kind = "shared"
   cpus = 1
-
-# Health check endpoint
-[[services.http_checks]]
-  interval = 30000              # every 30s
-  timeout  = 5000
-  grace_period = "60s"         # give 60s for startup before checking
-  method   = "GET"
-  path     = "/health"
 
 # Persistent volume for WhatsApp auth + data
 [[mounts]]
   source      = "newsbot_data"   # volume name (create with: fly volumes create newsbot_data)
   destination = "/app/data"
   initial_size = "1gb"
-
-[env]
-  NODE_ENV = "production"
-  PORT = "3000"
-  # Persist WhatsApp session on the persistent volume so the bot stays logged in across restarts
-  WWEBJS_AUTH_PATH = "/app/data/.wwebjs_auth"
 
 # Secrets are set via CLI: fly secrets set GEMINI_API_KEY=xxx
 # Never put real secrets in fly.toml

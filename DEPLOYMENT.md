@@ -1,4 +1,4 @@
-# 🚀 Multi-Cloud Deployment Guide — News Feeder Bot v3.14.0
+# 🚀 Multi-Cloud Deployment Guide — News Feeder Bot v3.17.0
 
 This guide provides step-by-step instructions for deploying **News Feeder Bot** across all major free, low-cost, and enterprise cloud hosting platforms.
 
@@ -459,9 +459,10 @@ podman run --rm -v newsbot_data:/data -v $(pwd):/backup alpine tar xzf /backup/b
 
 | Security Measure | How to Implement |
 |---|---|
-| **Dashboard Token Auth** | Set `DASHBOARD_TOKEN="your-secure-random-token"` in `.env` |
+| **Dashboard Token Auth** | Set `ADMIN_TOKEN` (or legacy `DASHBOARD_TOKEN`) in `.env`. Admin routes fail closed in production when no token is configured. |
 | **RBAC Roles** | Configure `ADMIN_TOKEN`, `ANALYST_TOKEN`, and `AUDITOR_TOKEN` |
-| **SSRF Prevention** | Built-in IP filtering blocks private RFC1918 subnets from custom RSS URLs |
+| **Demo Data** | Never set `DEMO_MODE=true` in production; sample IP/PoC/rule fixtures are disabled by default |
+| **SSRF Prevention** | Built-in IP filtering blocks private RFC1918 subnets (and DNS-resolved private addresses) from custom RSS/webhook URLs |
 | **Automated Backups** | Trigger snapshots via `POST /api/db/backup` or check `data/backups/` |
 | **Database Vacuuming** | WAL checkpoints and SQLite vacuum run automatically |
 | **Firewall (UFW)** | Only expose port `3000` (or `443` through reverse proxy); block raw internal ports |

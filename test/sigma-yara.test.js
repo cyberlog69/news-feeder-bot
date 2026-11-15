@@ -1,3 +1,4 @@
+require('./setup');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { generateSigmaRule, generateYaraRule, getOrGenerateDetectionRules } = require('../src/sigma-generator');

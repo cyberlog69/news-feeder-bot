@@ -25,6 +25,19 @@ async function handleCommand(text, config, startTime, senderInfo = {}) {
   const command = parts[0].toLowerCase();
   const args = parts.slice(1).join(' ');
 
+  // Optional admin allow-list (COMMAND_ADMIN_USERS). When configured, the
+  // senders pass isAdmin=false for IDs that are not on the list.
+  const watchlistAction = (parts[1] || 'list').toLowerCase();
+  const adminRequired =
+    command === '/ask' ||
+    command === '/briefing' ||
+    command === '/ciso-report' ||
+    (command === '/watchlist' && ['add', 'remove', 'del', 'delete'].includes(watchlistAction));
+
+  if (adminRequired && senderInfo.isAdmin === false) {
+    return '⛔ This command requires an administrator. Ask the operator to add your ID to COMMAND_ADMIN_USERS.';
+  }
+
   switch (command) {
     case '/status': {
       const uptimeSec = Math.floor((Date.now() - startTime) / 1000);

@@ -1,3 +1,4 @@
+require('./setup');
 // test/exposed-ip.test.js
 // Tests for Exposed IP & WAN Perimeter Intelligence, Monthly Filtering,
 // Sorting, and Print/PDF/Word report generation.

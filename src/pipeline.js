@@ -30,6 +30,7 @@ const { clusterArticles, fuseStoryCluster }           = require('./story-cluster
 const { getUserSubscription, matchesArticle }         = require('./subscription-manager');
 const { recordAuditEvent }                            = require('./audit-logger');
 const Deduplicator                                    = require('./deduplicator');
+const { getRuntimeState, setRuntimeState }            = require('./db');
 const logger                                          = require('./logger');
 
 // ── Config value bounds (prevents DoS via extreme values) ─────────────────────
@@ -50,6 +51,29 @@ function clamp(value, min, max, fallback) {
 // Stores { article, summary, aiUsed } objects for daily digest mode.
 // Cleared after each digest is sent.
 const digestBuffer = [];
+const MAX_DIGEST_ITEMS = 500;
+const DIGEST_STATE_KEY = 'digest_buffer';
+
+function loadDigestBuffer() {
+  try {
+    const raw = getRuntimeState(DIGEST_STATE_KEY);
+    if (!raw) return;
+    const items = JSON.parse(raw);
+    if (Array.isArray(items)) digestBuffer.push(...items.slice(-MAX_DIGEST_ITEMS));
+  } catch {
+    // Corrupt state should never block startup; start with an empty buffer.
+  }
+}
+
+function persistDigestBuffer() {
+  try {
+    setRuntimeState(DIGEST_STATE_KEY, JSON.stringify(digestBuffer));
+  } catch {
+    // Best-effort persistence only.
+  }
+}
+
+loadDigestBuffer();
 
 class NewsPipeline {
   /**
@@ -73,6 +97,9 @@ class NewsPipeline {
 
   /** Apply (or re-apply) configuration values from a parsed config object. */
   _applyConfig(config) {
+    // Keep the raw config so dashboard source management can read/update it.
+    this.config = config;
+
     const s = config.settings || {};
     this.maxArticles  = clamp(s.maxArticlesPerRun,       ...Object.values(BOUNDS.maxArticlesPerRun));
     this.delaySec     = clamp(s.delayBetweenMessagesSec, ...Object.values(BOUNDS.delayBetweenMessages));
@@ -264,7 +291,9 @@ class NewsPipeline {
 
           // If digest mode is on, buffer and skip per-article broadcast
           if (this.digestCfg.enabled) {
+            if (digestBuffer.length >= MAX_DIGEST_ITEMS) digestBuffer.shift();
             digestBuffer.push({ article, summary, aiUsed, threatIntel });
+            persistDigestBuffer();
             this.deduplicator.markSeen(article.url, article.title, article.source);
             sentCount++;
             logger.info(`Buffered for digest: ${article.title.slice(0, 55)}…`);
@@ -272,9 +301,20 @@ class NewsPipeline {
             continue;
           }
 
-          // 7. Format for each platform
-          const whatsappMsg = formatArticle(article, summary, aiUsed, severityKeywords, threatIntel);
-          const telegramMsg = formatArticleForTelegram(article, summary, aiUsed, severityKeywords, threatIntel);
+          // 7. Optional visual alert card (served at /cards/<file>)
+          const cardsEnabled = process.env.ENABLE_ALERT_CARDS === 'true'
+            || this.config?.settings?.enableAlertCards === true;
+          let alertCardUrl = null;
+          if (critical && cardsEnabled) {
+            try {
+              const { cardPath } = generateAlertCard(article, critical, threatIntel);
+              let baseUrl = String(process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+              if (baseUrl && !/^https?:\/\//i.test(baseUrl)) baseUrl = `https://${baseUrl}`;
+              if (baseUrl) alertCardUrl = `${baseUrl}/cards/${path.basename(cardPath)}`;
+            } catch (err) {
+              logger.warn(`Alert card generation failed: ${err.message.split('\n')[0]}`);
+            }
+          }
 
           // 8. Broadcast to routed platforms
           const targetSenders = this._getSendersForArticle(article);
@@ -307,11 +347,6 @@ class NewsPipeline {
                 currentArticle = localized.article;
                 currentSummary = localized.summary;
                 currentIntel   = localized.threatIntel;
-              }
-
-              // Generate visual alert card for critical news
-              if (critical) {
-                generateAlertCard(currentArticle, critical, currentIntel);
               }
 
               // Generate TTS audio summary if enabled or for critical news
@@ -359,10 +394,12 @@ class NewsPipeline {
                 const localizedTgMsg = formatArticleForTelegram(currentArticle, currentSummary, aiUsed, severityKeywords, currentIntel);
                 const buttons = [];
                 if (currentArticle.url) {
-                  buttons.push([
+                  const row = [
                     { text: '📖 Read Full Article', url: currentArticle.url },
                     { text: '🔗 Share',             url: `https://t.me/share/url?url=${encodeURIComponent(currentArticle.url)}&text=${encodeURIComponent(currentArticle.title.slice(0, 100))}` }
-                  ]);
+                  ];
+                  if (alertCardUrl) row.push({ text: '🖼 Alert Card', url: alertCardUrl });
+                  buttons.push(row);
                 }
                 await sender.sendMessageWithButtons(localizedTgMsg, buttons);
 
@@ -371,7 +408,8 @@ class NewsPipeline {
                   await sender.sendVoiceNote(audioObj.audioPath, `🎙️ Audio Summary: ${currentArticle.title.slice(0, 100)}`);
                 }
               } else {
-                const localizedWaMsg = formatArticle(currentArticle, currentSummary, aiUsed, severityKeywords, currentIntel);
+                let localizedWaMsg = formatArticle(currentArticle, currentSummary, aiUsed, severityKeywords, currentIntel);
+                if (alertCardUrl) localizedWaMsg += `\n\n🖼 Alert card: ${alertCardUrl}`;
                 await sender.sendMessage(localizedWaMsg);
               }
               logger.success(`[${name}] Sent (${targetLang.toUpperCase()}): ${currentArticle.title.slice(0, 55)}…`);
@@ -448,6 +486,7 @@ class NewsPipeline {
 
     // Clear buffer after sending
     digestBuffer.length = 0;
+    persistDigestBuffer();
   }
 
   /** Expose deduplicator stats for the health check and dashboard. */

@@ -4,7 +4,10 @@
 
 const logger = require('./logger');
 
-const ALLOWED_PROVIDERS = ['groq', 'gemini', 'openrouter', 'huggingface', 'ollama', 'extractive'];
+const ALLOWED_PROVIDERS = [
+  'groq', 'gemini', 'cerebras', 'mistral', 'cohere', 'cloudflare',
+  'openrouter', 'huggingface', 'ollama', 'extractive'
+];
 
 function validateEnv() {
   const issues = [];
@@ -46,11 +49,20 @@ function validateEnv() {
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
           issues.push(`${name} must be a valid HTTP or HTTPS URL.`);
         }
+        const { isSafeUrl } = require('./fetcher');
+        if (!isSafeUrl(url)) {
+          issues.push(`${name} points to a private/reserved address — refusing to use it (SSRF).`);
+        }
       } catch {
         issues.push(`${name} is not a valid URL: "${url}"`);
       }
     }
   });
+
+  // Demo mode opt-in
+  if (String(process.env.DEMO_MODE || '').toLowerCase() === 'true') {
+    warnings.push('DEMO_MODE=true — sample threat data may be inserted and displayed.');
+  }
 
   // 3. Summarizer provider validation
   const provider = (process.env.SUMMARIZER_PROVIDER || 'groq').toLowerCase().trim();

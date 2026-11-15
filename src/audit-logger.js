@@ -6,7 +6,9 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
 
-const AUDIT_DIR = path.join(process.cwd(), 'data', 'logs');
+const { DATA_DIR } = require('./paths');
+const { version: APP_VERSION } = require('../package.json');
+const AUDIT_DIR = path.join(DATA_DIR, 'logs');
 
 function getAuditLogPath() {
   const d = new Date();
@@ -26,11 +28,17 @@ function formatCefEvent(event) {
   const sevNum = severityMap[String(event.severity || 'low').toLowerCase()] || 3;
 
   const type = event.type || 'SECURITY_ALERT';
-  const name = String(event.name || 'Security Event').replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
-  const details = String(event.details || '').replace(/\\/g, '\\\\').replace(/=/g, '\\=');
+  const name = String(event.name || 'Security Event')
+    .replace(/[\r\n]/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|');
+  const details = String(event.details || '')
+    .replace(/[\r\n]/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/=/g, '\\=');
   const actor = event.actor || 'system';
 
-  return `CEF:0|NewsFeederBot|SOCEngine|3.14.0|${type}|${name}|${sevNum}|src=${event.ip || '127.0.0.1'} suser=${actor} msg=${details} rt=${Date.now()}`;
+  return `CEF:0|NewsFeederBot|SOCEngine|${APP_VERSION}|${type}|${name}|${sevNum}|src=${event.ip || '127.0.0.1'} suser=${actor} msg=${details} rt=${Date.now()}`;
 }
 
 /**

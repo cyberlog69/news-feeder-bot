@@ -4,6 +4,7 @@
 
 const { saveSubscription, getSubscription, getAllSubscriptions, deleteSubscription } = require('./db');
 const logger = require('./logger');
+const { mask } = require('./redact');
 
 /**
  * Set topic subscriptions for a recipient.
@@ -20,7 +21,7 @@ function setSubscription(targetId, platform, topics) {
 
   const topicsStr = topicList.length > 0 ? topicList.join(',') : 'all';
   saveSubscription(targetId, platform, topicsStr);
-  logger.info(`[Subscription] ${platform}:${targetId} subscribed to [${topicsStr}]`);
+  logger.info(`[Subscription] ${platform}:${mask(targetId)} subscribed to [${topicsStr}]`);
   return topicList;
 }
 
@@ -70,7 +71,7 @@ function matchesArticle(subscriptionTopics, article, isCritical = false) {
  */
 function deleteUserSubscription(targetId, platform) {
   deleteSubscription(targetId, platform);
-  logger.info(`[Subscription] Removed subscription for ${platform}:${targetId}`);
+  logger.info(`[Subscription] Removed subscription for ${platform}:${mask(targetId)}`);
 }
 
 /**

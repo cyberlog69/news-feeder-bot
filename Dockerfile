@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────
-#  Dockerfile — News Feeder Bot v3.14.0
+#  Dockerfile — News Feeder Bot v3.17.0
 #
 #  Multi-stage build:
 #    Stage 1 (deps)  — install production npm deps without heavy chrome binaries

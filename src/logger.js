@@ -2,6 +2,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const { DATA_DIR } = require('./paths');
 
 const colors = {
   reset:  '\x1b[0m',
@@ -14,7 +15,7 @@ const colors = {
 };
 
 // ── Log file setup ────────────────────────────────────────────────────────────
-const LOG_DIR      = path.join(process.cwd(), 'data', 'logs');
+const LOG_DIR      = path.join(DATA_DIR, 'logs');
 const MAX_LOG_DAYS = 7;   // keep 7 days of logs
 
 function getLogPath() {
@@ -50,8 +51,15 @@ function pruneOldLogs() {
 ensureLogDir();
 pruneOldLogs();
 
+let lastPruneDay = new Date().toDateString();
+
 function writeToFile(level, msg) {
   try {
+    const day = new Date().toDateString();
+    if (day !== lastPruneDay) {
+      lastPruneDay = day;
+      pruneOldLogs();
+    }
     const ts   = new Date().toISOString();
     const line = `[${ts}] [${level.padEnd(7)}] ${msg}\n`;
     fs.appendFileSync(getLogPath(), line, 'utf-8');

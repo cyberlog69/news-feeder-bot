@@ -6,8 +6,10 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const logger = require('./logger');
+const { synthesizeChunk } = require('./tts');
 
-const AUDIO_DIR = path.join(process.cwd(), 'data', 'audio');
+const { DATA_DIR } = require('./paths');
+const AUDIO_DIR = path.join(DATA_DIR, 'audio');
 
 function ensureAudioDir() {
   if (!fs.existsSync(AUDIO_DIR)) {
@@ -58,12 +60,10 @@ async function generateAudioSummary(article, summary, lang = 'en') {
     const audioBuffers = [];
 
     for (const chunk of chunks) {
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(chunk)}&tl=${ttsLang}&client=tw-ob`;
-      const res = await fetchWithTimeout(url, 6000);
-      if (!res.ok) {
-        throw new Error(`TTS API HTTP ${res.status}`);
+      const buffer = await synthesizeChunk(chunk, ttsLang);
+      if (!buffer || buffer.length === 0) {
+        throw new Error('TTS provider returned no audio');
       }
-      const buffer = Buffer.from(await res.arrayBuffer());
       audioBuffers.push(buffer);
     }
 
@@ -95,19 +95,6 @@ function splitTextIntoChunks(text, maxLength = 180) {
   }
   if (current.trim()) chunks.push(current.trim());
   return chunks;
-}
-
-async function fetchWithTimeout(url, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: controller.signal
-    });
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 module.exports = {

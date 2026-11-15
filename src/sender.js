@@ -17,6 +17,7 @@ const path   = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const logger  = require('./logger');
+const { mask } = require('./redact');
 
 // ── Cross-platform Chrome detection ──────────────────────────────────────────
 function findChrome() {
@@ -81,6 +82,13 @@ class WhatsAppSender {
     this._reconnecting  = false;
     this._reconnectAttempts = 0;
     this._destroyed     = false;
+    this._commandHandler = null;
+    this._commandListenerRegistered = false;
+  }
+
+  /** Register the async handler invoked for slash commands in the target chat. */
+  onCommand(handler) {
+    this._commandHandler = typeof handler === 'function' ? handler : null;
   }
 
   /** Reset the ready promise so post-reconnect waiters block again. */
@@ -92,6 +100,7 @@ class WhatsAppSender {
   async initialize() {
     this._reconnecting = false;
     this._reconnectAttempts = 0;
+    this._commandListenerRegistered = false;
     this._resetReadyPromise();
     const chromePath = findChrome();
     if (chromePath) {
@@ -160,13 +169,14 @@ class WhatsAppSender {
 
       try {
         this.resolvedChatId = await this._resolveTarget(this.target);
-        logger.success(`Messages will be sent to: ${this.target} (${this.resolvedChatId})`);
+        logger.success(`Messages will be sent to: ${mask(this.target)} (${mask(this.resolvedChatId)})`);
       } catch (err) {
-        logger.error(`Could not resolve target "${this.target}": ${err.message.split('\n')[0]}`);
+        logger.error(`Could not resolve target "${mask(this.target)}": ${err.message.split('\n')[0]}`);
         logger.warn('Run  npm run list-groups  to see available groups and their IDs.');
       }
 
       this.isReady = true;
+      this._registerCommandListener();
       this._readyResolve();
     });
 
@@ -185,6 +195,37 @@ class WhatsAppSender {
 
     logger.info('Starting WhatsApp client (this may take ~30 seconds)...');
     await this.client.initialize();
+  }
+
+  /**
+   * Listen for slash commands in the configured target chat only. Other chats
+   * on the linked WhatsApp account are ignored so the bot cannot be abused by
+   * arbitrary contacts or group members.
+   */
+  _registerCommandListener() {
+    if (!this.client || this._commandListenerRegistered) return;
+    this._commandListenerRegistered = true;
+
+    this.client.on('message', async (msg) => {
+      try {
+        if (!this._commandHandler || !this.resolvedChatId) return;
+        const body = String(msg.body || '').trim();
+        if (!body.startsWith('/')) return;
+
+        const chatId = msg.fromMe ? (msg.to || msg.from) : msg.from;
+        if (String(chatId) !== String(this.resolvedChatId)) return;
+
+        const reply = await this._commandHandler({
+          text: body,
+          targetId: String(this.resolvedChatId),
+          userId: String(msg.author || msg.from || ''),
+          platform: 'whatsapp'
+        });
+        if (reply) await this.client.sendMessage(chatId, reply);
+      } catch (err) {
+        logger.warn(`WhatsApp command failed: ${err.message.split('\n')[0]}`);
+      }
+    });
   }
 
   /**
@@ -232,7 +273,7 @@ class WhatsAppSender {
 
     if (/^\d+$/.test(target)) return target + '@c.us';
 
-    logger.info(`Searching for group named "${target}"...`);
+    logger.info(`Searching for group named "${mask(target)}"...`);
     const chats  = await this.client.getChats();
     const groups = chats.filter((c) => c.isGroup);
 
@@ -240,7 +281,7 @@ class WhatsAppSender {
       (g) => g.name.toLowerCase() === target.toLowerCase()
     );
     if (match) {
-      logger.success(`Found group: "${match.name}" → ${match.id._serialized}`);
+      logger.success(`Found group: "${match.name}" → ${mask(match.id._serialized)}`);
       return match.id._serialized;
     }
 
@@ -248,7 +289,7 @@ class WhatsAppSender {
       (g) => g.name.toLowerCase().includes(target.toLowerCase())
     );
     if (partial) {
-      logger.warn(`Partial match: "${partial.name}" → ${partial.id._serialized}`);
+      logger.warn(`Partial match: "${partial.name}" → ${mask(partial.id._serialized)}`);
       return partial.id._serialized;
     }
 

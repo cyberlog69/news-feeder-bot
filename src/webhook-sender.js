@@ -6,6 +6,7 @@
 
 const crypto = require('crypto');
 const logger = require('./logger');
+const { maskUrl } = require('./redact');
 
 class WebhookSender {
   /**
@@ -23,7 +24,15 @@ class WebhookSender {
     if (!this.webhookUrl) {
       throw new Error('OUTBOUND_WEBHOOK_URL environment variable is required.');
     }
-    logger.success(`Outbound Webhook Sender initialized: -> ${this.webhookUrl}`);
+
+    if (process.env.NODE_ENV === 'production') {
+      const { resolveSafeUrl } = require('./fetcher');
+      if (!(await resolveSafeUrl(this.webhookUrl))) {
+        throw new Error('OUTBOUND_WEBHOOK_URL resolves to a private/reserved address (SSRF blocked).');
+      }
+    }
+
+    logger.success(`Outbound Webhook Sender initialized: -> ${maskUrl(this.webhookUrl)}`);
   }
 
   async sendMessage(message) {
@@ -68,10 +77,9 @@ class WebhookSender {
 
     if (this.secret) {
       // HMAC-SHA256 signature over the raw body — lets the receiver verify
-      // authenticity and detect tampering (unlike a plaintext shared secret).
+      // authenticity and detect tampering. The shared secret itself is never
+      // transmitted.
       headers['X-NewsBot-Signature'] = signPayload(payload, this.secret);
-      headers['X-NewsBot-Secret'] = this.secret;
-      headers['Authorization'] = `Bearer ${this.secret}`;
     }
 
     const res = await fetchWithTimeout(this.webhookUrl, {
@@ -85,7 +93,7 @@ class WebhookSender {
       throw new Error(`Outbound webhook HTTP ${res.status}: ${errText.slice(0, 150)}`);
     }
 
-    logger.success(`[Outbound Webhook] Exported event payload to ${this.webhookUrl}`);
+    logger.success(`[Outbound Webhook] Exported event payload to ${maskUrl(this.webhookUrl)}`);
   }
 }
 

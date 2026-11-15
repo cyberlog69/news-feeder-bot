@@ -58,6 +58,11 @@ jobs:
       - name: Verify config.json is valid JSON
         run: node -e "JSON.parse(require('fs').readFileSync('config.json','utf-8')); console.log('✅ config.json is valid JSON');"
 
+      - name: Run unit tests (external network disabled)
+        run: npm test
+        env:
+          NEWSBOT_ALLOW_EXTERNAL_TESTS: 'false'
+
   # ── Job 2: Docker build test ─────────────────────────────────────────────────
   docker-build:
     name: Docker Build Test

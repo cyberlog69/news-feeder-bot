@@ -20,7 +20,10 @@
 //     [📖 Read Full Article]  [🔗 Share]
 //   Buttons use url type — no callback handler needed.
 
+const crypto = require('crypto');
 const logger = require('./logger');
+const { mask } = require('./redact');
+const { getRuntimeState, setRuntimeState } = require('./db');
 
 // Telegram Bot API base URL — always HTTPS
 const TG_API = 'https://api.telegram.org';
@@ -79,7 +82,7 @@ class TelegramSender {
     try {
       const me = await this._call('getMe');
       logger.success(`Telegram bot ready: @${me.username} (${me.first_name})`);
-      logger.info(`Telegram target: ${this.target}`);
+      logger.info(`Telegram target: ${mask(this.target)}`);
     } catch (err) {
       throw new Error(
         `Telegram initialization failed: ${err.message}\n` +
@@ -92,8 +95,10 @@ class TelegramSender {
    * Send an HTML-formatted message to the configured target.
    * Automatically truncates messages that exceed Telegram's 4096 char limit.
    * @param {string} message - HTML-safe string from formatter.js
+   * @param {string} [chatId] - Override target chat (used for command replies)
+   * @param {object} [options] - { parseMode: 'HTML' | null }
    */
-  async sendMessage(message) {
+  async sendMessage(message, chatId = this.target, options = {}) {
     // Enforce Telegram's character limit
     const text = message.length > TG_MAX_LENGTH
       ? message.slice(0, TG_MAX_LENGTH - 20) + '\n…<i>(truncated)</i>'
@@ -101,9 +106,9 @@ class TelegramSender {
 
     try {
       await this._call('sendMessage', {
-        chat_id:                  this.target,
+        chat_id:                  chatId,
         text,
-        parse_mode:               'HTML',
+        ...(options.parseMode === null ? {} : { parse_mode: 'HTML' }),
         disable_web_page_preview: true
       });
     } catch (err) {
@@ -227,6 +232,114 @@ class TelegramSender {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * Start long-polling getUpdates for slash commands.
+   * Only chats listed in `allowedChats` (default: this.target) are accepted.
+   *
+   * @param {Function} handler - async ({ text, targetId, userId, platform }) => reply
+   * @param {object}   [options]
+   * @param {string[]} [options.allowedChats]
+   * @param {number}   [options.pollTimeoutSec=25]
+   */
+  startCommandPolling(handler, { allowedChats = null, pollTimeoutSec = 25 } = {}) {
+    if (typeof handler !== 'function') {
+      return Promise.reject(new Error('startCommandPolling requires a handler function'));
+    }
+    if (this._polling) return this._pollingPromise;
+
+    this._polling = true;
+    this._updateOffset = this._updateOffset || 0;
+    this._pollFailures = 0;
+    this._offsetKey = `telegram_offset:${crypto.createHash('sha256').update(this.token).digest('hex').slice(0, 16)}`;
+
+    // Restore the last processed update so a restart does not replay commands.
+    try {
+      const savedOffset = Number(getRuntimeState(this._offsetKey));
+      if (Number.isFinite(savedOffset) && savedOffset > 0) {
+        this._updateOffset = savedOffset;
+      }
+    } catch {
+      // Non-fatal; the backlog skip below still prevents replay.
+    }
+    this._allowedChats = (Array.isArray(allowedChats) && allowedChats.length > 0 ? allowedChats : [this.target])
+      .map((v) => String(v).trim().toLowerCase())
+      .filter(Boolean);
+
+    this._pollingPromise = (async () => {
+      // Skip commands that arrived while the bot was offline so a restart does
+      // not replay stale instructions.
+      try {
+        if (!this._updateOffset) {
+          const backlog = await this._call('getUpdates', { offset: -1, limit: 1, timeout: 0 }, 5000);
+          const last = Array.isArray(backlog) ? backlog[backlog.length - 1] : null;
+          if (last?.update_id) this._updateOffset = last.update_id + 1;
+        }
+      } catch {
+        // Not fatal — start from the persisted/zero offset.
+      }
+
+      logger.info('Telegram command polling started');
+      while (this._polling) {
+        try {
+          const updates = await this._call('getUpdates', {
+            offset: this._updateOffset || undefined,
+            timeout: pollTimeoutSec,
+            allowed_updates: ['message']
+          }, (pollTimeoutSec + 10) * 1000);
+
+          this._pollFailures = 0;
+
+          for (const update of updates || []) {
+            this._updateOffset = Math.max(this._updateOffset, (update.update_id || 0) + 1);
+            try { setRuntimeState(this._offsetKey, String(this._updateOffset)); } catch {}
+            const msg = update.message;
+            if (!msg?.text || !msg.text.trim().startsWith('/')) continue;
+            if (msg.from?.is_bot) continue;
+            if (!this._isAllowedChat(msg.chat)) continue;
+
+            try {
+              const reply = await handler({
+                text: msg.text.trim(),
+                targetId: String(msg.chat.id),
+                userId: String(msg.from?.id || ''),
+                platform: 'telegram'
+              });
+              if (reply) await this.sendMessage(reply, msg.chat.id, { parseMode: null });
+            } catch (err) {
+              logger.warn(`Telegram command failed: ${err.message.split('\n')[0]}`);
+            }
+          }
+        } catch (err) {
+          if (!this._polling) break;
+          this._pollFailures += 1;
+          logger.warn(`Telegram command polling error (${this._pollFailures}/5): ${err.message.split('\n')[0]}`);
+          if (this._pollFailures >= 5) {
+            logger.warn('Telegram command polling disabled after repeated errors (check for a configured webhook)');
+            this._polling = false;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        }
+      }
+    })();
+
+    return this._pollingPromise;
+  }
+
+  /** Stop the command polling loop. */
+  stopCommandPolling() {
+    this._polling = false;
+  }
+
+  _isAllowedChat(chat) {
+    if (!chat) return false;
+    const id = String(chat.id);
+    const username = chat.username ? String(chat.username).toLowerCase() : '';
+    return this._allowedChats.some(
+      (target) => target === id || (target.startsWith('@') && target.slice(1) === username)
+    );
   }
 
   /**

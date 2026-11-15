@@ -3,6 +3,7 @@
 // Delivers dark-themed HTML email newsletters via SendGrid / Resend REST API or SMTP (nodemailer).
 
 const logger = require('./logger');
+const { maskEmail } = require('./redact');
 
 class EmailSender {
   /**
@@ -40,7 +41,7 @@ class EmailSender {
     if (this.provider === 'smtp' && !this.smtpHost) {
       throw new Error('SMTP_HOST is required when EMAIL_PROVIDER=smtp.');
     }
-    logger.success(`Email Newsletter Sender initialized (${this.provider}): -> ${this.toEmail}`);
+    logger.success(`Email Newsletter Sender initialized (${this.provider}): -> ${maskEmail(this.toEmail)}`);
   }
 
   /**
@@ -149,7 +150,7 @@ class EmailSender {
     const subject = `[News Alert] ${article.title}`;
 
     if (!this.apiKey && this.provider !== 'smtp') {
-      logger.info(`[Email Demo] Would send email to ${this.toEmail}: "${subject}"`);
+      logger.info(`[Email Demo] Would send email to ${maskEmail(this.toEmail)}: "${subject}"`);
       return;
     }
 
@@ -183,7 +184,7 @@ class EmailSender {
       const errText = await res.text().catch(() => '');
       throw new Error(`SendGrid API error: HTTP ${res.status} — ${errText.slice(0, 200)}`);
     }
-    logger.success(`[Email] Newsletter sent via SendGrid to ${this.toEmail}`);
+    logger.success(`[Email] Newsletter sent via SendGrid to ${maskEmail(this.toEmail)}`);
   }
 
   async _sendViaResend(subject, html) {
@@ -205,7 +206,7 @@ class EmailSender {
       const errText = await res.text().catch(() => '');
       throw new Error(`Resend API error: HTTP ${res.status} — ${errText.slice(0, 200)}`);
     }
-    logger.success(`[Email] Newsletter sent via Resend to ${this.toEmail}`);
+    logger.success(`[Email] Newsletter sent via Resend to ${maskEmail(this.toEmail)}`);
   }
 
   async _sendViaSmtp(subject, html) {
@@ -230,7 +231,7 @@ class EmailSender {
       subject,
       html
     });
-    logger.success(`[Email] Newsletter sent via SMTP (${this.smtpHost}) to ${this.toEmail}`);
+    logger.success(`[Email] Newsletter sent via SMTP (${this.smtpHost}) to ${maskEmail(this.toEmail)}`);
   }
 }
 

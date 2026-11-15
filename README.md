@@ -3,11 +3,11 @@
 # 📰 News Feeder Bot v3.17.0
 
 ### Autonomous Cybersecurity & Tech Intelligence Platform — Delivered Across 9 Platforms
-#### Threat Intel (CVE/EPSS/IOC/MITRE) · Sigma/YARA & Sentinel KQL · STIX/TAXII 2.1 · Neural Cyber Podcast · 3D Threat Globe · 0 Audit Vulnerabilities
+#### Threat Intel (CVE/EPSS/IOC/MITRE) · Sigma/YARA & Sentinel KQL · STIX/TAXII 2.1 · TTS Cyber Podcast · 3D Threat Globe · 0 Audit Vulnerabilities
 
 [![CI](https://github.com/cyberlog69/news-feeder-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/cyberlog69/news-feeder-bot/actions)
 [![Security](https://img.shields.io/badge/npm%20audit-0%20vulnerabilities-brightgreen)](https://npmjs.com)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-blue)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.13.0-blue)](https://nodejs.org)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](https://hub.docker.com)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -45,9 +45,9 @@
 |---|---|
 | 🛡️ **SIEM/SOAR Rule Transpiler & Push API** | Automatically transpiles Sigma rules into **Microsoft Sentinel KQL**, **Splunk SPL**, and **Elastic Detection Queries**. Includes rule syntax validation and automated push APIs (`/api/siem/rules`, `/api/siem/push`). |
 | 📡 **STIX 2.1 & TAXII 2.1 Threat Sharing** | Full **TAXII 2.1 Server** (`/taxii2/`, `/taxii2/root/`, `/taxii2/root/collections/`) serving STIX 2.1 indicator bundles, and structured **MISP Event** exports (`/api/misp/events`, `/api/stix/bundle`). |
-| 🎙️ **Neural Podcast Audio Synthesis** | Automatically compiles streamable daily cyber briefing `.mp3` audio files served via `/api/podcast/audio` and dynamically injects accurate enclosure metadata into the Apple/Spotify `/podcast.xml` RSS feed. |
+| 🎙️ **TTS Podcast Audio** | Compiles a daily briefing and attempts chunked TTS synthesis into `/api/podcast/audio/<episode>`; `/podcast.xml` includes an enclosure only when real audio exists (no silent placeholder files). |
 | ⚖️ **Granular Source Reputation & Breaker Bonus** | Per-source credibility weighting in `config.json` with dynamic **Breaker Bonus** (+0.10) for in-the-wild zero-days and emergency patches (`/api/sources/reputation`). |
-| 🧪 **94/94 Passing Unit Tests** | Automated test coverage expanded to 94 tests (`npm test`) covering SIEM push, STIX/TAXII, audio synthesis, and reputation scoring with a 100% pass rate. |
+| 🧪 **109/109 Passing Unit Tests** | Automated tests (`npm test`) cover SIEM push, STIX/TAXII, audio synthesis, reputation scoring, RBAC, SSRF guards, and dashboard/pipeline integration. CI now runs the suite before deploy. |
 
 ---
 
@@ -72,7 +72,7 @@
 | 🛡️ **Enrichment** | **Threat Intel Engine** | CVE, EPSS exploit probability, IOC parsing (IPs/hashes), MITRE ATT&CK technique IDs |
 | 🔊 **Media** | **TTS Voice Summaries** | Formats spoken narrative scripts and generates `.mp3` audio files |
 | | **Telegram Voice Notes** | Dispatches playable voice summaries directly to Telegram chats |
-| | **SVG Alert Cards** | Generates visual social alert graphics for `🚨 CRITICAL ALERT` articles |
+| | **SVG Alert Cards** | Opt-in visual alert graphics for `🚨 CRITICAL ALERT` articles, served at `/cards/<file>` |
 | 🌍 **Localization**| **Multi-Language Routing**| Translate news summaries per platform (`en`, `es`, `de`, `fr`, `hi`, `ja`, etc.) |
 | 📱 **Delivery** | **9 Platforms** | WhatsApp, Telegram, Discord, Google Chat, Slack, MS Teams, Email, Push, Webhook |
 | 🗄️ **Storage** | **Native SQLite** | Crash-proof SQLite storage (`data/newsbot.sqlite`) for cache, KEV catalog, and vector storage |
@@ -98,7 +98,7 @@
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Node.js 22+ (LTS)** → [nodejs.org](https://nodejs.org) *(required for built-in `node:sqlite` database & native test runner)*
+- **Node.js 22.13+ (LTS)** → [nodejs.org](https://nodejs.org) *(built-in `node:sqlite` is only unflagged from 22.13.0 onward)*
 - **npm 10+** → Bundled automatically with Node.js 22+
 - **Google Chrome** → [google.com/chrome](https://google.com/chrome) *(WhatsApp only)*
 
@@ -189,7 +189,7 @@ DEFAULT_LANGUAGE=en
 
 - **🎙️ TTS Voice Summary Engine** (`src/audio-generator.js`): Formats spoken narrative scripts and generates `.mp3` audio files in `data/audio/`.
 - **📲 Telegram Native Voice Notes** (`src/telegram-sender.js`): Delivers audio summaries as native playable Telegram Voice Notes directly in chats.
-- **🖼️ SVG Visual Alert Cards** (`src/card-generator.js`): Dynamically renders SVG social alert graphics in `data/cards/` for `🚨 CRITICAL ALERT` articles.
+- **🖼️ SVG Visual Alert Cards** (`src/card-generator.js`): Opt-in (`ENABLE_ALERT_CARDS=true` or `settings.enableAlertCards`) SVG graphics for `🚨 CRITICAL ALERT` articles, served at `/cards/<file>`. Set `PUBLIC_BASE_URL` to link them from Telegram/WhatsApp.
 
 ---
 
@@ -199,7 +199,7 @@ DEFAULT_LANGUAGE=en
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `SUMMARIZER_PROVIDER` | No | `groq` | Choose: `groq`, `gemini`, `openrouter`, `huggingface`, `ollama`, `extractive` |
+| `SUMMARIZER_PROVIDER` | No | `groq` | Choose: `groq`, `gemini`, `cerebras`, `mistral`, `cohere`, `cloudflare`, `openrouter`, `huggingface`, `ollama`, `extractive` |
 | `GROQ_API_KEY` | Optional | — | Free API key from [console.groq.com](https://console.groq.com) |
 | `GEMINI_API_KEY` | Optional | — | Free API key from [aistudio.google.com](https://aistudio.google.com) |
 | `OPENROUTER_API_KEY` | Optional | — | API key from [openrouter.ai](https://openrouter.ai) |
@@ -218,15 +218,28 @@ DEFAULT_LANGUAGE=en
 | `PUSHOVER_API_TOKEN` | Optional | — | Pushover application token |
 | `OUTBOUND_WEBHOOK_URL` | Optional | — | Outbound HTTP webhook endpoint for SOAR/SIEM |
 | `ENABLE_AUDIO_SUMMARY` | Optional | `false` | Set to `true` to enable TTS voice summaries for all news |
+| `TTS_PROVIDER` | Optional | `google` | `google`, `openai`, `elevenlabs`, or `none` |
+| `OPENAI_API_KEY` | Optional | — | Required for `TTS_PROVIDER=openai` |
+| `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID` | Optional | — | Required for `TTS_PROVIDER=elevenlabs` |
 | `DEFAULT_LANGUAGE` | Optional | `en` | Default output language code (`en`, `es`, `de`, `fr`, etc.) |
-| `DASHBOARD_TOKEN` | Optional | — | Secret token to secure `/trigger` and administrative APIs |
+| `DASHBOARD_TOKEN` | Optional | — | Legacy alias for the admin token; secures `/trigger` and admin APIs |
+| `ADMIN_TOKEN` | Optional | — | Full-access token for administrative APIs |
+| `ANALYST_TOKEN` | Optional | — | Analyst-level token (`/api/watchlist`, source management) |
+| `AUDITOR_TOKEN` | Optional | — | Read-only token for `/api/audit-log` and `/api/subscriptions` |
+| `SESSION_SECRET` | Optional | admin token | HMAC key for dashboard session cookies |
+| `COMMAND_ADMIN_USERS` | Optional | — | Comma-separated chat user IDs allowed to run admin-only bot commands |
+| `DEMO_MODE` | Optional | `false` | Enables sample/fixture threat data (never enable in production) |
+| `EXPOSED_IP_SEEDS` | Optional | — | Comma-separated real IPv4 addresses to enrich during exposed-IP scans |
+| `EXPOSED_IP_SEED_FILE` / `EXPOSED_IP_SEED_URL` | Optional | — | Local/remote CSV, JSON, or text feed of real IPv4 addresses |
+| `PUBLIC_BASE_URL` | Optional | — | Public base URL used to link generated alert cards and public feeds |
+| `TRUST_PROXY` | Optional | `false` | Use `X-Forwarded-For`/`X-Forwarded-Proto` when behind a reverse proxy |
 | `PORT` | Optional | `3000` | HTTP port for Web Dashboard and health check |
 
 ---
 
 ## 🤖 Bot Commands
 
-Interactive commands supported across WhatsApp, Telegram, Discord, and Web Dashboard:
+Interactive commands are long-polled/listened for on the **configured WhatsApp and Telegram target chats only** (other chats on the linked account are ignored). Set `COMMAND_ADMIN_USERS` to restrict `/ask`, `/briefing`, and watchlist mutations to specific user IDs.
 
 | Command | Usage | Description |
 |---|---|---|
@@ -243,11 +256,15 @@ Interactive commands supported across WhatsApp, Telegram, Discord, and Web Dashb
 The Web Dashboard listens on `http://localhost:3000`:
 
 ### Endpoints
-- `GET /` — Full HTML Web Dashboard with tabbed navigation (`Overview`, `Feed Health`, `Rules & Filters`).
-- `GET /health` — JSON Health Check for cloud platforms (`{"status": "ok", "uptime": 120}`).
-- `GET /metrics` — System metrics and Prometheus format (`/metrics?format=prometheus`).
-- `GET /events` — Server-Sent Events (SSE) live log stream.
-- `POST /trigger` — Trigger manual pipeline cycle.
+- `GET /login` / `POST /login` / `GET /logout` — Signed HttpOnly cookie session for the console and read-only APIs.
+- `GET /` — Full HTML Web Dashboard with tabbed navigation (`Overview`, `Feed Health`, `Rules & Filters`). Redirects to `/login` in production until authenticated.
+- `GET /health` — JSON Health Check for cloud platforms (`{"status": "ok", "uptime": 120}`). Public.
+- `GET /metrics` — System metrics and Prometheus format (`/metrics?format=prometheus`). Requires an auditor token or session.
+- `GET /events` — Server-Sent Events (SSE) live log stream. Requires a token.
+- `POST /trigger` — Trigger a manual pipeline cycle (admin token/session; fails closed in production).
+- All other `/api/*` routes require a valid session or bearer token in production. Public exceptions: `/api/podcast/*`, `/api/stix/bundle`, `/api/misp/events`, plus the syndication feeds and TAXII endpoints.
+- `GET /api/subscriptions` — List topic subscriptions (auditor token).
+- `POST /api/subscriptions` / `DELETE /api/subscriptions` — Manage per-target topic filters (admin token).
 - `GET /api/feed-health` — Real-time RSS Feed Health Index matrix.
 - `GET /api/sources` — Active sources list enriched with latency and error metrics.
 - `POST /api/sources/toggle` — Toggle source on/off in `config.json` with hot reloading.
@@ -345,8 +362,8 @@ Run the Node.js native test suite:
 npm test
 ```
 
-### Test Suite Breakdown (94/94 Passed)
-- `test/phase1-enterprise.test.js` — SIEM KQL/SPL push, STIX/TAXII 2.1 threat sharing, neural podcast audio synthesis, and source reputation
+### Test Suite Breakdown (109/109 Passed)
+- `test/phase1-enterprise.test.js` — SIEM KQL/SPL push, STIX/TAXII 2.1 threat sharing, TTS podcast audio handling, and source reputation
 - `test/enterprise-security.test.js` — RBAC token validation, sliding-window rate limiting, CEF/ECS audit logging & DB maintenance
 - `test/social-broadcast.test.js` — Mastodon/Bluesky broadcasters and public RSS/Atom/JSON feed generators
 - `test/ciso-briefing.test.js` — Executive CISO threat briefing generator (Markdown & print/PDF HTML)
@@ -357,13 +374,15 @@ npm test
 - `test/audio-media.test.js` — TTS script formatting & SVG alert card generation
 - `test/channels.test.js` — HTML email template builder, Pushover/Ntfy push, Webhooks
 - `test/command.test.js` — `/status`, `/sources`, `/search`, `/ask` command handlers
-- `test/dashboard.test.js` — Feed health tracking & Web Dashboard administrative APIs
+- `test/dashboard.test.js` — Feed health tracking, Web Dashboard APIs, and `/api/sources` pipeline-config integration
 - `test/db.test.js` — SQLite database transactions & cache operations
 - `test/formatter.test.js` — Telegram HTML & WhatsApp formatters
 - `test/google-chat.test.js` — Google Chat Cards v2 webhook syntax validator
 - `test/rag.test.js` — TF-IDF vectorization, Cosine Similarity, and RAG answer synthesis
 - `test/scorer.test.js` — Article scoring & threshold evaluation
-- `test/security.test.js` — SSRF URL validator (`isSafeUrl`)
+- `test/security.test.js` — SSRF URL validator and RBAC fail-closed behaviour
+- `test/session.test.js` — signed dashboard session cookies (tamper/expiry)
+- `test/login.test.js` — dashboard login flow and protected read-only APIs
 - `test/summarizer.test.js` — Multi-provider AI summarization cascade
 - `test/threat-intel.test.js` — CVE, EPSS, IOC, and MITRE ATT&CK technique extraction
 - `test/translator.test.js` — Multi-language translation engine & cache
@@ -373,8 +392,25 @@ npm test
 ## 🔒 Security
 
 - **0 npm audit vulnerabilities**
-- **SSRF Prevention**: Internal IP blocking (`127.0.0.1`, `169.254.169.254`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`)
+- **Dashboard login + fail-closed auth**: admins sign in with a token; the server issues a short-lived HMAC-signed `HttpOnly`, `SameSite=Strict` cookie. All `/api/*` routes (except the public podcast/STIX/MISP endpoints) and `/` require authentication in production. If no token is configured they return `401` / redirect to the login page instead of opening up.
+- **Session secret**: set `SESSION_SECRET` to keep cookies valid across token rotation; otherwise the admin token is used as the signing key.
+- **Fake-data guard**: sample IPs, PoCs, detection rules, and threat-map nodes are only generated when `DEMO_MODE=true`.
+- **SSRF Prevention**: Internal IP blocking (`127.0.0.1`, `169.254.169.254`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, IPv6 loopback/ULA/link-local) including DNS-resolution checks at fetch time.
 - **Sanitized Input**: Control character stripping and HTML escaping across all senders
+- **Outbound webhooks** are authenticated with an HMAC-SHA256 `X-NewsBot-Signature` over the raw body; the shared secret is never transmitted.
+
+---
+
+## ⚠️ Known Limitations
+
+- **Exposed-IP scanner is experimental.** Public aggregate feeds (GreyNoise metadata, Shadowserver tags) do not expose individual hosts, so the scanner only enriches existing rows or addresses supplied via `EXPOSED_IP_SEEDS`, `EXPOSED_IP_SEED_FILE`, or `EXPOSED_IP_SEED_URL`. It intentionally never fabricates IPs.
+- **Full-text extraction** fetches HTML through the SSRF-safe redirect handler (`src/fetcher.js`) before handing it to `@extractus/article-extractor`, so the extractor no longer performs its own network I/O.
+- **Persisted state**: the digest buffer and Telegram `getUpdates` offset are stored in SQLite and survive restarts. The deduplicator reloads its recent history from SQLite.
+- **Tests run offline by default** (external `fetch` is blocked; local dashboard servers still work). Set `NEWSBOT_ALLOW_EXTERNAL_TESTS=true` to hit live APIs intentionally.
+- **WhatsApp Web is unofficial**: account bans and session expiry are inherent risks of `whatsapp-web.js`.
+- **TTS** defaults to an unofficial Google endpoint; set `TTS_PROVIDER=openai` or `elevenlabs` for a supported API. When TTS is unavailable or `TTS_PROVIDER=none`, episodes and voice summaries are published text-only with no audio enclosure.
+- **Prometheus scraping** of `/metrics` now needs a bearer token or session cookie.
+- **Read-only APIs are private in production**; if you want a public status page, expose only `/health` and the syndication feeds.
 
 ---
 
@@ -383,6 +419,8 @@ npm test
 | Issue | Cause | Solution |
 |---|---|---|
 | `database is locked` | SQLite concurrent access | Tests are pre-configured with `--test-concurrency=1` in `package.json` |
+| Dashboard keeps redirecting to `/login` | No valid session and tokens are configured | Sign in with `ADMIN_TOKEN`/`ANALYST_TOKEN`, or send `Authorization: Bearer <token>` for API clients |
+| `401` on `/metrics` in production | Metrics now require a token | Add `Authorization: Bearer $AUDITOR_TOKEN` to the Prometheus scrape config |
 | `GROQ_API_KEY not set` | Missing AI provider key | Get free key at [console.groq.com](https://console.groq.com) or set `SUMMARIZER_PROVIDER=extractive` |
 | `Puppeteer Chrome Error` | Chrome path missing on VPS | Install Chromium (`apt install chromium-browser`) and set `CHROME_PATH=/usr/bin/chromium` |
 | `EADDRINUSE: port 3000` | Port in use | Change `PORT` in `.env` or kill existing process |

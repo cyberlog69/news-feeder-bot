@@ -12,7 +12,7 @@
 //   - Content fields are capped in length
 
 const Parser  = require('rss-parser');
-const { extract } = require('@extractus/article-extractor');
+const { extractFromHtml } = require('@extractus/article-extractor');
 const dns     = require('dns/promises');
 const net     = require('net');
 const logger  = require('./logger');
@@ -78,7 +78,8 @@ function isSafeUrl(url) {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    const hostname = parsed.hostname;
+    // URL.hostname keeps brackets for IPv6 literals (e.g. "[::1]").
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
     if (PRIVATE_IP_PATTERNS.some((p) => p.test(hostname))) return false;
     // If the hostname is itself an IP literal, validate it exhaustively
     if (net.isIP(hostname)) return !isPrivateIp(hostname);
@@ -99,7 +100,7 @@ async function resolveSafeUrl(url) {
   if (!isSafeUrl(url)) return false;
 
   try {
-    const hostname = new URL(url).hostname;
+    const hostname = new URL(url).hostname.replace(/^\[|\]$/g, '');
     if (net.isIP(hostname)) return !isPrivateIp(hostname);
 
     const addresses = await dns.lookup(hostname, { all: true });
@@ -109,6 +110,30 @@ async function resolveSafeUrl(url) {
     // DNS resolution failure → treat as unsafe rather than risk SSRF
     return false;
   }
+}
+
+/**
+ * Fetch with redirects followed manually, re-validating every hop against the
+ * private-address blocklist. Without this, a public feed could 302 to
+ * http://127.0.0.1 and bypass the initial SSRF check.
+ */
+async function fetchWithSafeRedirects(url, options = {}, maxHops = 5) {
+  let current = url;
+  for (let hop = 0; hop <= maxHops; hop++) {
+    const res = await fetch(current, { ...options, redirect: 'manual' });
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (!location) return res;
+      const next = new URL(location, current).href;
+      if (!(await resolveSafeUrl(next))) {
+        throw new Error('Redirect to a private/reserved address was blocked (SSRF)');
+      }
+      current = next;
+      continue;
+    }
+    return res;
+  }
+  throw new Error(`Too many redirects (more than ${maxHops})`);
 }
 
 // ── ETag / Last-Modified cache ────────────────────────────────────────────────
@@ -170,7 +195,7 @@ async function fetchSource(source) {
     const timer      = setTimeout(() => controller.abort(), 15000);
     let res;
     try {
-      res = await fetch(rssUrl, { headers: reqHeaders, signal: controller.signal });
+      res = await fetchWithSafeRedirects(rssUrl, { headers: reqHeaders, signal: controller.signal });
     } finally {
       clearTimeout(timer);
     }
@@ -278,7 +303,26 @@ async function getFullArticleText(url) {
   if (!(await resolveSafeUrl(url))) return null;
 
   try {
-    const article = await extract(url, {}, { timeout: 12000 });
+    // Fetch the HTML ourselves so every redirect hop is SSRF-validated, then
+    // hand the trusted HTML to the extractor (which no longer performs I/O).
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    let res;
+    try {
+      res = await fetchWithSafeRedirects(url, {
+        headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,application/xhtml+xml' },
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!res.ok) return null;
+    const contentType = String(res.headers.get('content-type') || '');
+    if (contentType && !/text\/html|application\/xhtml\+xml|text\/plain/i.test(contentType)) return null;
+
+    const html = (await res.text()).slice(0, 2_000_000);
+    const article = await extractFromHtml(html, url);
     if (!article?.content) return null;
 
     return article.content
@@ -301,4 +345,12 @@ function cleanText(str) {
     .trim();
 }
 
-module.exports = { fetchAllSources, getFullArticleText, isSafeUrl, resolveSafeUrl, isPrivateIp, getFeedHealth };
+module.exports = {
+  fetchAllSources,
+  getFullArticleText,
+  isSafeUrl,
+  resolveSafeUrl,
+  isPrivateIp,
+  getFeedHealth,
+  fetchWithSafeRedirects
+};

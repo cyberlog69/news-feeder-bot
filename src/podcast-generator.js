@@ -7,8 +7,10 @@ const fs = require('fs');
 const path = require('path');
 const { getSeenArticles, savePodcastEpisode, getLatestPodcastEpisode, getAllPodcastEpisodes } = require('./db');
 const logger = require('./logger');
+const { synthesizeChunk } = require('./tts');
 
-const PODCAST_DIR = path.join(process.cwd(), 'data', 'podcasts');
+const { DATA_DIR } = require('./paths');
+const PODCAST_DIR = path.join(DATA_DIR, 'podcasts');
 
 function ensurePodcastDir() {
   if (!fs.existsSync(PODCAST_DIR)) {
@@ -38,22 +40,31 @@ function createMinimalMp3Buffer(durationSec = 2) {
   return buffer;
 }
 
+/** Estimate spoken duration from a script (~150 words/minute). */
+function estimateDuration(script) {
+  const words = String(script || '').trim().split(/\s+/).filter(Boolean).length;
+  const seconds = Math.max(20, Math.round((words / 150) * 60));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 /**
  * Synthesize an MP3 audio file for a podcast episode.
- * Attempts chunked TTS synthesis; falls back to structured synthetic audio frame buffer.
+ * Returns audioPath: null when TTS is unavailable — it never fabricates a
+ * silent file and presents it as a real episode.
  * @param {string} episodeId
  * @param {string} script
- * @returns {Promise<{ audioPath: string, fileSize: number, duration: string }>}
+ * @returns {Promise<{ audioPath: string|null, fileSize: number, duration: string }>}
  */
 async function synthesizePodcastAudio(episodeId, script) {
   ensurePodcastDir();
   const safeId = String(episodeId).replace(/[^a-zA-Z0-9_-]/g, '_');
   const audioPath = path.join(PODCAST_DIR, `${safeId}.mp3`);
+  const duration = estimateDuration(script);
 
   // Return cached if exists
   if (fs.existsSync(audioPath) && fs.statSync(audioPath).size > 0) {
     const stat = fs.statSync(audioPath);
-    return { audioPath, fileSize: stat.size, duration: '2:00' };
+    return { audioPath, fileSize: stat.size, duration };
   }
 
   try {
@@ -74,43 +85,25 @@ async function synthesizePodcastAudio(episodeId, script) {
 
     const buffers = [];
     for (const chunk of chunks.slice(0, 3)) { // First 3 chunks for headline summary
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(chunk)}&tl=en&client=tw-ob`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 4000);
       try {
-        const res = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0' },
-          signal: controller.signal
-        });
-        if (res.ok) {
-          const buf = Buffer.from(await res.arrayBuffer());
-          if (buf.length > 0) buffers.push(buf);
-        }
+        const buf = await synthesizeChunk(chunk, 'en');
+        if (buf && buf.length > 0) buffers.push(buf);
       } catch {
-        // Fallback handled below
-      } finally {
-        clearTimeout(timer);
+        // Text-only fallback is handled below.
       }
     }
 
     if (buffers.length > 0) {
       const fullBuffer = Buffer.concat(buffers);
       fs.writeFileSync(audioPath, fullBuffer);
-      return { audioPath, fileSize: fullBuffer.length, duration: '2:00' };
+      return { audioPath, fileSize: fullBuffer.length, duration };
     }
   } catch (err) {
-    logger.warn(`[Podcast] TTS synthesis fallback: ${err.message}`);
+    logger.warn(`[Podcast] TTS synthesis failed: ${err.message}`);
   }
 
-  // Graceful fallback: synthesize standard broadcast MP3 audio frames
-  const fallbackBuffer = createMinimalMp3Buffer(3);
-  fs.writeFileSync(audioPath, fallbackBuffer);
-
-  return {
-    audioPath,
-    fileSize: fallbackBuffer.length,
-    duration: '2:00'
-  };
+  logger.warn('[Podcast] No TTS audio available — episode will be published without an audio enclosure');
+  return { audioPath: null, fileSize: 0, duration };
 }
 
 /**
@@ -123,21 +116,12 @@ function getPodcastAudioPath(episodeId = null) {
   if (episodeId) {
     const safeId = String(episodeId).replace(/[^a-zA-Z0-9_-]/g, '_');
     const specificPath = path.join(PODCAST_DIR, `${safeId}.mp3`);
-    if (fs.existsSync(specificPath)) return specificPath;
+    return fs.existsSync(specificPath) ? specificPath : null;
   }
 
-  // Find most recent .mp3 in PODCAST_DIR
+  // Find most recent real .mp3 in PODCAST_DIR
   const files = fs.readdirSync(PODCAST_DIR).filter((f) => f.endsWith('.mp3')).sort().reverse();
-  if (files.length > 0) {
-    return path.join(PODCAST_DIR, files[0]);
-  }
-
-  // Create default fallback MP3
-  const defaultPath = path.join(PODCAST_DIR, 'latest.mp3');
-  if (!fs.existsSync(defaultPath)) {
-    fs.writeFileSync(defaultPath, createMinimalMp3Buffer(2));
-  }
-  return defaultPath;
+  return files.length > 0 ? path.join(PODCAST_DIR, files[0]) : null;
 }
 
 /**
@@ -190,16 +174,27 @@ function generatePodcastRssXml(baseUrl = 'http://localhost:3000') {
   const cleanBase = baseUrl.replace(/\/$/, '');
 
   const itemsXml = episodes.map((ep) => {
-    const audioUrl = ep.audioUrl && ep.audioUrl.startsWith('http') ? ep.audioUrl : `${cleanBase}${ep.audioUrl || '/api/podcast/audio'}`;
-    const fileSize = ep.fileSize || 1024000;
+    const hasAudio = Boolean(ep.audioUrl);
+    const audioUrl = hasAudio
+      ? (ep.audioUrl.startsWith('http') ? ep.audioUrl : `${cleanBase}${ep.audioUrl}`)
+      : null;
+    const safeId = String(ep.episodeId).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const localPath = ep.audioUrl ? path.join(PODCAST_DIR, `${safeId}.mp3`) : null;
+    const fileSize = localPath && fs.existsSync(localPath) ? fs.statSync(localPath).size : 0;
+
+    // Podcast apps require <enclosure> to offer a download. Omit it (rather
+    // than pointing at a silent placeholder) when TTS produced no audio.
+    const enclosureXml = hasAudio
+      ? `      <enclosure url="${audioUrl}" length="${fileSize}" type="audio/mpeg"/>\n`
+      : '';
+
     return `    <item>
       <title><![CDATA[${ep.title}]]></title>
       <description><![CDATA[${ep.script}]]></description>
       <link>${cleanBase}/api/podcast/latest</link>
       <guid isPermaLink="false">${ep.episodeId}</guid>
       <pubDate>${new Date(ep.createdAt).toUTCString()}</pubDate>
-      <enclosure url="${audioUrl}" length="${fileSize}" type="audio/mpeg"/>
-      <itunes:duration>${ep.duration || '2:00'}</itunes:duration>
+${enclosureXml}      <itunes:duration>${ep.duration || '0:00'}</itunes:duration>
       <itunes:explicit>no</itunes:explicit>
     </item>`;
   }).join('\n');
@@ -469,25 +464,24 @@ function getPodcastXsl() {
  * @param {Array<object>} [articles]
  * @returns {object} - Episode details
  */
-function compileDailyPodcast(articles = null) {
+async function compileDailyPodcast(articles = null) {
   ensurePodcastDir();
   const podcast = generatePodcastScript(articles);
-  const audioUrl = `/api/podcast/audio`;
+  const audio = await synthesizePodcastAudio(podcast.episodeId, podcast.script);
 
-  // Pre-generate audio file
-  try {
-    const audioPath = path.join(PODCAST_DIR, `${podcast.episodeId}.mp3`);
-    if (!fs.existsSync(audioPath)) {
-      fs.writeFileSync(audioPath, createMinimalMp3Buffer(2));
-    }
-  } catch {}
+  const audioUrl = audio.audioPath ? `/api/podcast/audio/${podcast.episodeId}` : '';
+  savePodcastEpisode(podcast.episodeId, podcast.title, audioUrl, podcast.script, audio.duration);
 
-  savePodcastEpisode(podcast.episodeId, podcast.title, audioUrl, podcast.script, '2m');
-  logger.info(`[Podcast] 🎙️ Compiled daily briefing podcast: "${podcast.title}"`);
+  logger.info(
+    `[Podcast] 🎙️ Compiled daily briefing podcast: "${podcast.title}"` +
+    (audioUrl ? ` (${Math.round(audio.fileSize / 1024)} KB audio)` : ' (text only — no TTS audio)')
+  );
 
   return {
     ...podcast,
-    audioUrl
+    audioUrl,
+    duration: audio.duration,
+    fileSize: audio.fileSize
   };
 }
 

@@ -6,10 +6,11 @@ const fs = require('fs');
 const path = require('path');
 const { initDb } = require('./db');
 const logger = require('./logger');
+const { DATA_DIR } = require('./paths');
 
-const DB_PATH = path.join(process.cwd(), 'data', 'newsbot.sqlite');
-const BACKUP_DIR = path.join(process.cwd(), 'data', 'backups');
-const MAX_BACKUPS = 7; // retention: keep the most recent 7 backups
+const DB_PATH = path.join(DATA_DIR, 'newsbot.sqlite');
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const MAX_BACKUPS = 7; // default retention; override with settings.backupRetentionCount
 
 /**
  * Create a timestamped backup of the SQLite database.
@@ -17,7 +18,7 @@ const MAX_BACKUPS = 7; // retention: keep the most recent 7 backups
  *
  * @returns {string|null} Path to backup file
  */
-function createDatabaseBackup() {
+function createDatabaseBackup(maxBackups = MAX_BACKUPS) {
   try {
     if (!fs.existsSync(DB_PATH)) return null;
 
@@ -39,8 +40,8 @@ function createDatabaseBackup() {
     fs.copyFileSync(DB_PATH, backupFile);
     logger.success(`[DB Maintenance] Database backup created: ${backupFile}`);
 
-    // Retention: remove oldest backups beyond MAX_BACKUPS
-    pruneOldBackups();
+    // Retention: remove oldest backups beyond the configured limit
+    pruneOldBackups(maxBackups);
 
     return backupFile;
   } catch (err) {
@@ -133,8 +134,8 @@ function cleanupGeneratedMedia(days = 30) {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   let removed = 0;
 
-  for (const dir of ['data', 'audio', 'cards']) {
-    const full = path.join(process.cwd(), 'data', dir);
+  for (const dir of ['audio', 'cards', 'podcasts']) {
+    const full = path.join(DATA_DIR, dir);
     try {
       if (!fs.existsSync(full)) continue;
       for (const f of fs.readdirSync(full)) {

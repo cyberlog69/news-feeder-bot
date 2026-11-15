@@ -1,3 +1,4 @@
+require('./setup');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
@@ -6,7 +7,10 @@ const {
   getSeenArticles,
   searchSeenArticles,
   getCachedSummary,
-  setCachedSummary
+  setCachedSummary,
+  getRuntimeState,
+  setRuntimeState,
+  deleteRuntimeState
 } = require('../src/db');
 
 test('SQLite DB - markUrlSeen and isUrlSeen', () => {
@@ -26,6 +30,14 @@ test('SQLite DB - searchSeenArticles', () => {
 
   assert.ok(results.length > 0);
   assert.ok(results.some((r) => r.title.includes('Ransomware')));
+});
+
+test('SQLite DB - runtime state persists across reads and can be cleared', () => {
+  assert.equal(getRuntimeState('unit-test-key'), null);
+  setRuntimeState('unit-test-key', JSON.stringify({ hello: 'world' }));
+  assert.deepEqual(JSON.parse(getRuntimeState('unit-test-key')), { hello: 'world' });
+  deleteRuntimeState('unit-test-key');
+  assert.equal(getRuntimeState('unit-test-key'), null);
 });
 
 test('SQLite DB - summary cache operations', () => {

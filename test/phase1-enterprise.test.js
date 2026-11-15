@@ -1,3 +1,4 @@
+require('./setup');
 // test/phase1-enterprise.test.js
 // Unit tests covering Phase 1 capabilities:
 // - SIEM/SOAR Rule Push & Deployment (Sentinel KQL, Splunk, Elastic)
@@ -211,7 +212,7 @@ test('TIP Sync - TAXII 2.1 discovery and collections metadata format correctly',
 
 // ── 3. Podcast Audio Synthesis Tests ──────────────────────────────────────────
 
-test('Podcast Generator - createMinimalMp3Buffer and synthesizePodcastAudio generate valid MP3', async () => {
+test('Podcast Generator - synthesizePodcastAudio returns real audio or an explicit text-only result', async () => {
   const buf = createMinimalMp3Buffer(1);
   assert.ok(buf.length > 0);
   assert.equal(buf[0], 0xFF);
@@ -221,12 +222,18 @@ test('Podcast Generator - createMinimalMp3Buffer and synthesizePodcastAudio gene
   const script = 'Welcome to the Daily Cyber Threat Briefing. Testing audio synthesis.';
   const result = await synthesizePodcastAudio(episodeId, script);
 
-  assert.ok(result.audioPath.endsWith('.mp3'));
-  assert.ok(result.fileSize > 0);
-  assert.ok(fs.existsSync(result.audioPath));
-
-  const fetchedPath = getPodcastAudioPath(episodeId);
-  assert.equal(fetchedPath, result.audioPath);
+  // TTS may be unavailable offline. In that case the generator must not
+  // fabricate a silent placeholder; it reports audioPath: null instead.
+  assert.match(result.duration, /^\d+:\d{2}$/);
+  if (result.audioPath) {
+    assert.ok(result.audioPath.endsWith('.mp3'));
+    assert.ok(result.fileSize > 0);
+    assert.ok(fs.existsSync(result.audioPath));
+    assert.equal(getPodcastAudioPath(episodeId), result.audioPath);
+  } else {
+    assert.equal(result.fileSize, 0);
+    assert.equal(getPodcastAudioPath(episodeId), null);
+  }
 });
 
 // ── 4. Granular Source Reputation & Adaptive Weighting Tests ──────────────────
@@ -271,7 +278,7 @@ test('Scorer - reputation and breaker bonus elevate article score', () => {
 
 // ── 5. Dashboard Phase 1 Endpoints Integration Tests ──────────────────────────
 
-test('Phase 1 Dashboard APIs - /taxii2/, /api/stix/bundle, /api/misp/events, /api/sources/reputation, /api/podcast/audio respond with 200', async () => {
+test('Phase 1 Dashboard APIs - /taxii2/, /api/stix/bundle, /api/misp/events, /api/sources/reputation, /api/podcast/audio respond correctly', async () => {
   const mockPipeline = {
     getStats: () => ({ totalSent: 20 }),
     getRecentArticles: () => [
@@ -319,10 +326,13 @@ test('Phase 1 Dashboard APIs - /taxii2/, /api/stix/bundle, /api/misp/events, /ap
   assert.equal(repRes.status, 200);
   assert.ok(repRes.data.includes('cisa advisories'));
 
-  // 5. Podcast Audio Stream (MP3)
+  // 5. Podcast Audio Stream (MP3) — 404 is valid when TTS is unavailable
   const audioRes = await req('/api/podcast/audio');
-  assert.equal(audioRes.status, 200);
-  assert.equal(audioRes.headers['content-type'], 'audio/mpeg');
+  if (audioRes.status === 200) {
+    assert.equal(audioRes.headers['content-type'], 'audio/mpeg');
+  } else {
+    assert.equal(audioRes.status, 404);
+  }
 
   // 6. SIEM Rules API
   const siemRes = await req('/api/siem/rules');

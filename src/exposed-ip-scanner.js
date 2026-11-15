@@ -1,4 +1,7 @@
 // src/exposed-ip-scanner.js
+// EXPERIMENTAL: aggregate public feeds do not expose individual hosts, so this
+// module only enriches existing records or EXPOSED_IP_SEEDS. It never invents
+// addresses or presents aggregate labels as IP indicators.
 // Scrapes publicly exposed IPs and open-port data from free public threat-intel
 // sources that require NO API key:
 //   1. Shodan InternetDB  — https://internetdb.shodan.io/<ip>  (per-IP enrichment)
@@ -13,6 +16,8 @@
 
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const logger = require('./logger');
 
 // ---------------------------------------------------------------------------
@@ -142,7 +147,7 @@ async function shadowserverTopIps() {
 // ---------------------------------------------------------------------------
 // Collect a seed list of IPs to enrich from the local DB (threat intel IOCs)
 // ---------------------------------------------------------------------------
-function getSeedIps(limit = 40) {
+async function getSeedIps(limit = 40) {
   try {
     const { initDb } = require('./db');
     const db = initDb();
@@ -161,58 +166,40 @@ function getSeedIps(limit = 40) {
       // Table may not exist yet on first run
     }
 
+    const addCandidates = (text) => {
+      for (const match of String(text || '').matchAll(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g)) {
+        ips.add(match[0]);
+      }
+    };
+
+    // Operator-supplied real addresses to enrich (comma-separated).
+    addCandidates(process.env.EXPOSED_IP_SEEDS || '');
+
+    // Optional local seed file (CSV/JSON/text) with real IPv4 addresses.
+    const seedFile = String(process.env.EXPOSED_IP_SEED_FILE || '').trim();
+    if (seedFile) {
+      try {
+        addCandidates(fs.readFileSync(path.resolve(seedFile), 'utf-8').slice(0, 5_000_000));
+      } catch (err) {
+        logger.warn(`[ExposedIP] Could not read EXPOSED_IP_SEED_FILE: ${err.message}`);
+      }
+    }
+
+    // Optional remote seed feed (CSV/JSON/text) with real IPv4 addresses.
+    const seedUrl = String(process.env.EXPOSED_IP_SEED_URL || '').trim();
+    if (seedUrl) {
+      try {
+        const res = await safeFetch(seedUrl, {}, 10000);
+        if (res.ok) addCandidates((await res.text()).slice(0, 5_000_000));
+      } catch (err) {
+        logger.warn(`[ExposedIP] Could not fetch EXPOSED_IP_SEED_URL: ${err.message}`);
+      }
+    }
+
     return [...ips].slice(0, limit);
   } catch {
     return [];
   }
-}
-
-// ---------------------------------------------------------------------------
-// Fetch a fresh batch of globally notable exposed IPs from public sources
-// Uses GreyNoise GNQL stats endpoint (no key needed for metadata-level data)
-// ---------------------------------------------------------------------------
-async function fetchGlobalNotableIps() {
-  const results = [];
-
-  // Source 1: GreyNoise "noise" stats by country/tag (no-auth community endpoint)
-  const gnEndpoints = [
-    { url: 'https://api.greynoise.io/v3/meta/metadata', label: 'GreyNoise Metadata' }
-  ];
-
-  for (const ep of gnEndpoints) {
-    try {
-      const res = await safeFetch(ep.url, {}, 8000);
-      if (!res.ok) continue;
-      const data = await res.json();
-
-      // GreyNoise metadata returns countries, sensor counts, etc.
-      if (data && Array.isArray(data.countries)) {
-        for (const c of data.countries.slice(0, 20)) {
-          results.push({
-            source:      'GreyNoise',
-            ip:          `${c.country_code}-SCANNER-NET`,
-            country:     c.country      || 'Unknown',
-            countryCode: c.country_code || '--',
-            ports:       [],
-            services:    [],
-            tags:        ['mass-scanner', `noise:${c.noise_ip_count || 0}`],
-            cves:        [],
-            isNoise:     true,
-            isRiot:      false,
-            riskScore:   Math.min(10, Math.round((c.noise_ip_count || 0) / 5000)),
-            org:         `${c.noise_ip_count || 0} noisy IPs`,
-            hostnames:   [],
-            firstSeen:   new Date().toISOString(),
-            lastSeen:    new Date().toISOString(),
-          });
-        }
-      }
-    } catch {
-      // skip
-    }
-  }
-
-  return results;
 }
 
 // ---------------------------------------------------------------------------
@@ -366,55 +353,14 @@ async function runDailyScan() {
   const saved = new Set();
   let totalSaved = 0;
 
-  // ── Phase 1: Fetch global notable IPs from GreyNoise metadata ──────────────
-  try {
-    const globalIps = await fetchGlobalNotableIps();
-    for (const record of globalIps) {
-      if (!record.ip || saved.has(record.ip)) continue;
-      saved.add(record.ip);
-      saveExposedIp(record);
-      totalSaved++;
-    }
-    logger.info(`[ExposedIP] Phase 1 (GreyNoise global): ${globalIps.length} records`);
-  } catch (err) {
-    logger.warn(`[ExposedIP] Phase 1 failed: ${err.message}`);
-  }
-
-  // ── Phase 2: Shadowserver public tag feed ──────────────────────────────────
+  // ── Phase 1: Shadowserver public tag feed ──────────────────────────────────
   try {
     const shadowIps = await shadowserverTopIps();
     for (const item of shadowIps) {
       if (!item.ip || saved.has(item.ip)) continue;
-      // Only enrich real IPs (skip aggregate rows)
+      // Only store real IPv4 addresses. Aggregate/tag rows are not indicators.
       const isRealIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(item.ip);
-      if (!isRealIp) {
-        // Save as a stub record for display purposes
-        saveExposedIp({
-          ip:          item.ip,
-          source:      'Shadowserver',
-          country:     item.country || '',
-          countryCode: item.country || '',
-          city:        '',
-          org:         '',
-          timezone:    '',
-          ports:       item.port ? [item.port] : [],
-          services:    item.tag ? [item.tag] : [],
-          cves:        [],
-          tags:        [item.tag || 'unknown'],
-          hostnames:   [],
-          vulns:       [],
-          isNoise:     false,
-          isRiot:      false,
-          gnClass:     'unknown',
-          gnName:      '',
-          riskScore:   3,
-          firstSeen:   new Date().toISOString(),
-          lastSeen:    new Date().toISOString()
-        });
-        saved.add(item.ip);
-        totalSaved++;
-        continue;
-      }
+      if (!isRealIp) continue;
       // Real IP — enrich it
       const record = await enrichIp(item.ip, 'Shadowserver');
       record.tags = [...new Set([...(record.tags || []), item.tag])];
@@ -424,14 +370,14 @@ async function runDailyScan() {
       // Rate limit: 1 req/sec
       await new Promise(r => setTimeout(r, 1100));
     }
-    logger.info(`[ExposedIP] Phase 2 (Shadowserver): ${shadowIps.length} records`);
+    logger.info(`[ExposedIP] Phase 1 (Shadowserver): ${shadowIps.length} records`);
   } catch (err) {
-    logger.warn(`[ExposedIP] Phase 2 failed: ${err.message}`);
+    logger.warn(`[ExposedIP] Phase 1 failed: ${err.message}`);
   }
 
-  // ── Phase 3: Enrich existing seed IPs from local threat intel ──────────────
+  // ── Phase 2: Enrich existing seed IPs from local threat intel ──────────────
   try {
-    const seedIps = getSeedIps(20);
+    const seedIps = await getSeedIps(20);
     let enriched = 0;
     for (const ip of seedIps) {
       if (saved.has(ip)) continue;
@@ -444,9 +390,9 @@ async function runDailyScan() {
       totalSaved++;
       await new Promise(r => setTimeout(r, 1100));
     }
-    logger.info(`[ExposedIP] Phase 3 (IOC enrichment): ${enriched} IPs enriched`);
+    logger.info(`[ExposedIP] Phase 2 (IOC enrichment): ${enriched} IPs enriched`);
   } catch (err) {
-    logger.warn(`[ExposedIP] Phase 3 failed: ${err.message}`);
+    logger.warn(`[ExposedIP] Phase 2 failed: ${err.message}`);
   }
 
   logger.success(`[ExposedIP] ✅ Daily scan complete — ${totalSaved} records saved`);
